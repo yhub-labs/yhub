@@ -33,7 +33,32 @@ make publish           # uploads dist/*.whl only (needs UV_PUBLISH_TOKEN)
 
 * **`web/dist` and `capsules/` must exist first**: a missing `force-include` source fails the build outright (`Forced include not found`). `make wheel` handles the order.
 * Ship the **wheel**; the sdist also builds (with `include`/`artifacts`) but needs a Node toolchain on the release machine. Version lives only in `yhub/__init__.py` (`[tool.hatch.version]`); `web/package.json`, `tauri/Cargo.toml` and `tauri/tauri.conf.json` are bumped together and `make verify-versions` blocks mismatches.
-* CI: `.github/workflows/ci.yml` (wheel + backend/plugin/i18n verification + `cargo test`), `release.yml` (tag `v*` → wheel → PyPI trusted publishing).
+* CI: `.github/workflows/ci.yml` (wheel + backend/plugin/i18n verification + `cargo test`), `release.yml` (publishing a GitHub Release → wheel built, self-checked, then uploaded to PyPI through Trusted Publishing — no token, see the next section).
+
+## Publishing from GitHub (Trusted Publishing)
+
+`.github/workflows/release.yml` uploads to PyPI without any stored token: GitHub mints a short-lived OIDC token that PyPI checks against the trusted publisher registered for this repository. The token never exists as a secret, so there is nothing to rotate or leak.
+
+**One-time setup, on PyPI (only the project owner can do this)** — `https://pypi.org/manage/project/yhub/settings/publishing/` → *Add a new publisher*:
+
+| Field | Value |
+| --- | --- |
+| Owner | `yhub-labs` |
+| Repository | `yhub` |
+| Workflow name | `release.yml` |
+| Environment | `pypi` |
+
+These four must match the workflow exactly, or PyPI rejects the token exchange (`invalid-publisher`). `environment: pypi` in the workflow is not decoration: the environment name is part of what PyPI verifies, and an environment with required reviewers also gates the upload behind a manual approval.
+
+**Cutting a release:**
+
+1. Bump the version in all five manifests (`make verify-versions` fails on a mismatch; single source is `yhub/__init__.py`).
+2. Commit, push, wait for `ci` to go green — the release workflow does not re-run the acceptance suite.
+3. GitHub → *Releases* → *Draft a new release* → tag `v0.1.0` (create it) → publish. Publishing the release is what triggers the upload; pushing a tag alone does nothing.
+
+The workflow refuses to publish when the tag and `__version__` disagree, then runs these checks on the exact artifact it is about to upload: `twine check`, `web/dist` + bundled capsule present in the wheel, no relative links in the long description, and a real install-and-boot (`/api/health` and the workbench asset URL). A dry run is `Actions → release → Run workflow`, which builds and self-checks but skips the upload.
+
+A PyPI version number can never be reused: a bad upload is fixed by yanking it and publishing the next patch version, not by re-uploading.
 
 ## Installing the backend
 

@@ -1,16 +1,28 @@
 name: release
 
+# PyPI 发布走 Trusted Publishing（OIDC，不存 token）。配置步骤见 docs/packaging.md §6。
+#
+# 触发方式：在 GitHub 上**发布 Release**（tag 形如 `v0.1.0`）。tag 必须与
+# `yhub/__init__.py` 的 `__version__` 一致，否则这里会拦下来 —— PyPI 上的版本号
+# 传上去就改不了，赌错一次这个号就废了。
+#
+# 手动触发（workflow_dispatch）只构建 + 自检，不上传：用来在真发版前验证流水线。
 on:
-  push:
-    tags: ["v*"]
+  release:
+    types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
+  id-token: write # PyPI Trusted Publishing 要这个
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   wheel:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,22 +33,70 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
+      - name: 版本一致性
+        run: ./scripts/check-versions.sh
+      - name: tag 与 __version__ 一致
+        if: github.event_name == 'release'
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver="$(uv run python -c 'import yhub; print(yhub.__version__)')"
+          if [ "$tag" != "$ver" ]; then
+            echo "::error::release tag ${GITHUB_REF_NAME} 与 __version__ ${ver} 不一致"
+            exit 1
+          fi
+          echo "tag ${GITHUB_REF_NAME} = __version__ ${ver}"
       - name: 前端依赖
         working-directory: web
         run: npm ci
-      - name: 版本一致性
-        run: ./scripts/check-versions.sh
-      - name: 构建 wheel
+      - name: 构建 wheel（前端 + 胶囊）
         run: make wheel
+      - name: 产物自检（twine + 内容 + 链接）
+        run: |
+          rm -f dist/.gitignore
+          uv run --with twine twine check dist/*.whl
+          uv run python - <<'PY'
+          import glob, re, zipfile
+          wheel = glob.glob("dist/*.whl")[0]
+          archive = zipfile.ZipFile(wheel)
+          names = archive.namelist()
+          need = ["yhub/web/dist/index.html", "yhub/_data/capsules/hello/index.html"]
+          missing = [n for n in need if n not in names]
+          assert not missing, f"{wheel} 里缺 {missing} —— 装上会没有界面或没有内置胶囊"
+          meta = archive.read(next(n for n in names if n.endswith("dist-info/METADATA"))).decode()
+          bad = [u for u in re.findall(r"\]\(([^)]+)\)", meta)
+                 if not u.startswith(("http://", "https://", "#"))]
+          assert not bad, f"README 里还有相对链接，PyPI 页面上会是死链：{bad}"
+          print(f"PASS {wheel}：{len(names)} 个文件，界面与胶囊都在，描述里没有相对链接")
+          PY
+      - name: 装一遍再启动（发布的就是这个轮子）
+        run: |
+          uv venv .wheel-venv
+          uv pip install --python .wheel-venv/bin/python dist/*.whl
+          YHUB_CONFIG_DIR="$PWD/.wheel-cfg" ./.wheel-venv/bin/yhub gui --no-open --port 8931 &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+          for _ in $(seq 1 60); do
+            curl -sf http://127.0.0.1:8931/api/health >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8931/api/health
+          echo
+          curl -sf http://127.0.0.1:8931/ | grep -q "/assets/" \
+            || { echo "::error::工作台首页没有引用前端资源"; exit 1; }
+          echo "PASS 从 wheel 装上后能起来，工作台首页有前端资源"
       - uses: actions/upload-artifact@v4
         with:
           name: wheel
           path: dist/*.whl
+          if-no-files-found: error
 
   publish:
     needs: wheel
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
-    environment: pypi
+    environment:
+      name: pypi
+      url: https://pypi.org/p/yhub
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -45,3 +105,4 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist
+          print-hash: true
