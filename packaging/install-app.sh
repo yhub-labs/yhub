@@ -350,7 +350,10 @@ fi
 
 if [ "$RESTART" = 1 ]; then
   info "拉起新装的 App…"
-  open "$DEST"
+  # 环境隔离：本脚本常在验收/开发 shell 里被调用，那个 shell 可能还带着 YHUB_CONFIG_DIR 之类的
+  # 隔离变量。App 会继承它们，于是装机版后端读的是临时配置根（症状：工具只剩几个、设置页路径
+  # 在 /var/folders）。拉起前一律摘掉，App 才会落到 ~/.config/yhub。
+  env -u YHUB_CONFIG_DIR -u YHUB_LANG -u YHUB_SETTINGS_FILE -u YHUB_PORT open "$DEST"
   READY=""
   for _ in $(seq 1 150); do
     if curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then READY=1; break; fi

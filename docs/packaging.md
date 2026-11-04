@@ -83,7 +83,10 @@ make install                     # rebuild only if build inputs changed
 make install ARGS="--force"      # ignore the fingerprint
 make install ARGS="--no-build"   # install the existing .app
 make install ARGS="--no-restart"
+make open-app                    # launch the installed app with YHUB_* isolation vars stripped
 ```
+
+`make open-app` exists because the shell inherits the environment of whoever launches it: a shell that still exports `YHUB_CONFIG_DIR` (from `make dev-plugin`, an acceptance run, or a probe) hands it to the app, and the installed backend then reads that throwaway config root. The symptom is quiet — `/api/tools` shows a handful of tools and the settings page points at `/var/folders/…`, never an error. `open-app` and `install-app.sh`'s restart path both strip `YHUB_CONFIG_DIR` / `YHUB_LANG` / `YHUB_SETTINGS_FILE` / `YHUB_PORT` before launching.
 
 `packaging/install-app.sh` (never hand-roll `rm -rf` + `ditto`):
 
@@ -99,7 +102,9 @@ make install ARGS="--no-restart"
 
 ## Publishing the macOS shell
 
-`.github/workflows/release-app.yml` attaches the shell to every GitHub Release: `Y-Hub_<version>_aarch64.dmg` plus its `.sha256`. It is a **separate workflow from the PyPI publish** on purpose — macOS runners queue for tens of minutes at a time (observed), and a stuck shell build must not delay or fail the package upload. Failures here are visible on the release but do not touch PyPI.
+`.github/workflows/release-app.yml` attaches the shell to every GitHub Release: `Y-Hub_<version>_aarch64.dmg` plus its `.sha256`. The image is assembled with `hdiutil` from `tauri/target/release/bundle/macos/Y-Hub.app` plus `Applications` (a symlink) and `README.txt` (from `packaging/dmg/README.txt`, `@VERSION@` substituted at build time — the image carries the two steps users skip: install the backend, and how to get past Gatekeeper). Tauri's own `--bundles dmg` is not used: its `bundle_dmg.sh` drives Finder through AppleScript for window layout, which fails outside an interactive session and cannot add files to the image.
+
+It is a **separate workflow from the PyPI publish** on purpose — macOS runners queue for tens of minutes at a time (observed), and a stuck shell build must not delay or fail the package upload. Failures here are visible on the release but do not touch PyPI.
 
 **The artifact is ad-hoc signed, not notarized**, so Gatekeeper blocks the first launch:
 

@@ -67,6 +67,14 @@ cat <<EOF
 错误信息退出，那就是反馈（不会留一个半新半旧的进程）。
 EOF
 
+# 退出时提醒：开发后端占过 8790、也 export 过隔离变量。直接 `open -a` 重开 App 会继承它们，
+# 于是装机版后端读的是这个开发配置根（工具只剩几个，界面上看不出原因）。
+cleanup_note() {
+  echo
+  echo "== 开发后端已停。重开装机版请用：make open-app（会摘掉 YHUB_* 隔离变量）"
+}
+trap cleanup_note EXIT
+
 export YHUB_CONFIG_DIR="$CONFIG_DIR"
 export YHUB_LANG="$LANG_TAG"
 exec uv run uvicorn yhub.server.main:app \

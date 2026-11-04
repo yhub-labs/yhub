@@ -19,7 +19,7 @@
 #
 # 目标平台目前只有 macOS（Tauri 壳）。Windows/Linux 见 docs/packaging.md。
 
-.PHONY: dev-plugin capsules verify-versions wheel publish install-backend verify-backend verify-cli verify-i18n verify-plugins verify-settings verify-edit-mode web app install install-hooks uninstall-hooks verify-app smoke dashboard plugin-list help
+.PHONY: open-app dev-plugin capsules verify-versions wheel publish install-backend verify-backend verify-cli verify-i18n verify-plugins verify-settings verify-edit-mode web app install install-hooks uninstall-hooks verify-app smoke dashboard plugin-list help
 
 help:
 	@sed -n '2,20p' Makefile | sed 's/^# \{0,1\}//'
@@ -38,6 +38,13 @@ wheel: verify-versions web capsules
 # 只传 wheel：sdist 需要用户本机有 npm/node 先构建前端，不适合作为默认安装路径。
 publish: wheel
 	uv publish dist/*.whl
+
+# 打开装机版 App，并摘掉当前 shell 里可能残留的隔离变量。
+# 直接用 `open -a` 时，App 会继承不管哪来的 YHUB_CONFIG_DIR，于是后端读临时配置根——
+# 症状是 /api/tools 只剩几个工具、设置页里的路径在 /var/folders。
+open-app:
+	@env -u YHUB_CONFIG_DIR -u YHUB_LANG -u YHUB_SETTINGS_FILE -u YHUB_PORT open -a /Applications/Y-Hub.app
+	@echo "已拉起 /Applications/Y-Hub.app（不继承 YHUB_* 隔离变量）"
 
 # 本地开发插件：把插件目录软链进 build/dev-config，起一个 --reload 后端（改 plugin.py / locales 自动重起）。
 #   make dev-plugin PLUGIN=~/Projects/yhub-plugin-zdic [PORT=8790]
