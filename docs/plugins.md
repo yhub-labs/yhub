@@ -130,7 +130,8 @@ yhub plugin list [--updates] [--json]     # core + installed + installable
 yhub plugin search <kw> | info <id|owner/repo>
 yhub plugin install zdic                  # registry id
 yhub plugin install owner/repo[@ref][#subdir] | https://github.com/owner/repo   # flags: --ref, --force, --yes
-yhub plugin install /path/to/plugin       # local dir
+yhub plugin install /path/to/plugin       # local dir; add --id <plugin-id> when the folder is
+                                          # named after a repo (yhub-plugin-zdic) and not the plugin
 yhub plugin update <id> | --all ; remove|uninstall <id> [--purge] ; enable|disable <id>
 yhub plugin registry get|set <url>|clear
 ```

@@ -73,6 +73,10 @@ def _build_parser() -> argparse.ArgumentParser:
     install_parser.add_argument("--force", action="store_true", help="Overwrite if already installed")
     install_parser.add_argument("--ref", default="", help="GitHub tag/branch/commit")
     install_parser.add_argument("--yes", action="store_true", help="Skip the third-party trust prompt")
+    install_parser.add_argument(
+        "--id", default="", metavar="plugin-id",
+        help="Local directory only: install under this id instead of the directory name"
+             " (a single-plugin repo's folder is named after the repo, not the plugin)")
     rm_parser = plugin_sub.add_parser("remove", help="Uninstall a third-party plugin")
     rm_parser.add_argument("plugin_id", metavar="id")
     rm_parser.add_argument("--purge", action="store_true",
@@ -494,6 +498,7 @@ def _run_plugin(args, parser) -> int:
                 source,
                 force=args.force,
                 ref=getattr(args, "ref", ""),
+                plugin_id=(getattr(args, "id", "") or None),
             )
             extra = tr("cli.plugin.restart_required") if result.get("restart_required") else ""
             print(tr("cli.plugin.installed", id=result["id"], version=result.get("version") or "",

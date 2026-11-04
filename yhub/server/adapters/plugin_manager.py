@@ -551,13 +551,13 @@ def _install_github(
     )
 
 
-def install_spec(spec: str, *, force: bool = False, ref: str = "") -> dict:
+def install_spec(spec: str, *, force: bool = False, ref: str = "", plugin_id: str | None = None) -> dict:
     """Single entry point: local directory / GitHub / registry id.
 
     A successful install notifies the registry hook, so the GUI picks the new plugin up **without a
     restart** (its routes are registered and its tool appears in `/api/tools`).
     """
-    result = _install_spec(spec, force=force, ref=ref)
+    result = _install_spec(spec, force=force, ref=ref, plugin_id=plugin_id)
     # `restart_required` is honest, not decorative: in the GUI process the hook has already rebuilt
     # the registry (tool list + routes), so nothing needs restarting; the CLI's own process has no
     # hook, and the running GUI there still holds the previous registry.
@@ -565,7 +565,8 @@ def install_spec(spec: str, *, force: bool = False, ref: str = "") -> dict:
     return result
 
 
-def _install_spec(spec: str, *, force: bool = False, ref: str = "") -> dict:
+def _install_spec(spec: str, *, force: bool = False, ref: str = "",
+                  plugin_id: str | None = None) -> dict:
     """The install itself (see `install_spec`: same signature, no registry notification)."""
     spec = spec.strip()
     if not spec:
@@ -575,7 +576,9 @@ def _install_spec(spec: str, *, force: bool = False, ref: str = "") -> dict:
                           hint=tr("plugins.err.hint_registry_or_github"))
     path = Path(spec).expanduser()
     if path.is_dir():
-        manifest = add_plugin(path, force=force)
+        # `plugin_id` lets a single-plugin repository be installed from its own checkout, where the
+        # directory name is the repository's (`yhub-plugin-zdic`) and not the plugin's (`zdic`).
+        manifest = add_plugin(path, force=force, plugin_id=plugin_id)
         _record_install(manifest["id"], source="local", spec=str(path),
                         version=manifest.get("version") or "")
         return {"id": manifest["id"], "version": manifest.get("version") or "",
