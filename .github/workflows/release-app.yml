@@ -67,14 +67,17 @@ jobs:
 
       - name: Tauri CLI
         # 仓库里没有 tauri/package.json：本机靠 `cargo install tauri-cli` 的全局命令，
-        # CI 上没有，所以这里装一个（和本机 2.11.x 同大版本）。
-        run: npm install --global @tauri-apps/cli@2
+        # CI 上不存在。装到全局后**直接调 `tauri`**，不要写 `npx tauri` —— 本地没有这个包时
+        # npx 会报 "could not determine executable to run"（2026-11-04 实测就是这么红的）。
+        run: |
+          npm install --global @tauri-apps/cli@2
+          tauri --version
 
       - name: 构建 dmg（ad-hoc 签名）
         # CI=true 让 Tauri 跳过 DMG 的 Finder 排版（那一步要 AppleScript 权限，本机跑都会失败）
         run: |
           cd tauri
-          CI=true npx tauri build --bundles dmg \
+          CI=true tauri build --bundles dmg \
             --config '{"bundle":{"macOS":{"signingIdentity":"-"}}}'
 
       - name: 核对产物（签名 + 里面确实是这个版本）
