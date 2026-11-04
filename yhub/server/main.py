@@ -359,27 +359,37 @@ def plugin_panel(plugin_id: str):
     """Serve a plugin's own screen (`presentation.panel`) as one HTML file.
 
     The workbench shows it in an iframe, so a plugin ships its UI with no build step in this repo and
-    no shared component tree. Missing plugin / no declaration / file gone after install → 404 with a
-    plain message; the workbench falls back to its placeholder.
+    no shared component tree. Every "there is no screen here" case — unknown id, plugin installed but
+    not loaded (`disabled`), no declaration, file removed after install — is a 404 with a plain
+    message, so a disabled plugin cannot keep serving its panel and scripts can tell "gone" (404)
+    from "the host broke" (5xx).
     """
-    from fastapi.responses import FileResponse
+    from fastapi.responses import FileResponse, JSONResponse
     from .adapters import _plugin_loader as L
+
+    def missing(message: str) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"ok": False, "error": message, "hint": ""})
+
+    # Serving is gated on the *loaded* plugin set, not on the directory: `disabled` leaves the files
+    # in place, and a panel must disappear together with its tool.
+    if plugin_id not in {meta.get("id") for meta in _registered_adapters}:
+        return missing(tr("plugins.err.unknown_id", id=plugin_id))
 
     dir_path = L.plugins_dir() / plugin_id
     manifest_path = dir_path / "plugin.json"
     if not manifest_path.is_file():
-        raise ToolError(tr("plugins.err.unknown_id", id=plugin_id))
+        return missing(tr("plugins.err.unknown_id", id=plugin_id))
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        raise ToolError(tr("plugins.err.manifest_not_json", path=f"{plugin_id}/plugin.json",
-                           line=0, message="unreadable"))
+        return missing(tr("plugins.err.manifest_not_json", path=f"{plugin_id}/plugin.json",
+                          line=0, message="unreadable"))
     entry = ((manifest.get("presentation") or {}) if isinstance(manifest, dict) else {}).get("panel")
     if not entry:
-        raise ToolError(tr("plugins.err.panel_undeclared", id=plugin_id))
+        return missing(tr("plugins.err.panel_undeclared", id=plugin_id))
     target = (dir_path / str(entry)).resolve()
     if dir_path.resolve() not in target.parents or not target.is_file():
-        raise ToolError(tr("plugins.err.panel_missing", entry=repr(entry)))
+        return missing(tr("plugins.err.panel_missing", entry=repr(entry)))
     response = FileResponse(target, media_type="text/html")
     response.headers["Content-Security-Policy"] = PANEL_CSP
     response.headers["Cache-Control"] = "no-store"

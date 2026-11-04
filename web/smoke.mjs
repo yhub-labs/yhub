@@ -22,6 +22,9 @@ const browser = await chromium.launch({
   args: ['--no-first-run', '--no-default-browser-check', '--disable-gpu'],
 })
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+// 语言必须**确定**：界面读 localStorage（`yhub.lang`），后端按 settings 的 ui_language 渲染自己的
+// 字符串。addInitScript 在首个 about:blank 上写不进去（Playwright 的历史坑），所以起手先落 origin
+// 再写一次、然后重载——否则冒烟会拿「英文界面 vs 中文工具名」互相打架，红得莫名其妙。
 await page.addInitScript(() => window.localStorage.setItem('yhub.lang', 'zh-CN'))
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
@@ -58,6 +61,8 @@ async function clickTool(name) {
 
 try {
   await page.goto(URL, { waitUntil: 'networkidle' })
+  await page.evaluate(() => window.localStorage.setItem('yhub.lang', 'zh-CN'))
+  await page.reload({ waitUntil: 'networkidle' })
   await page.waitForSelector('aside button', { timeout: 10000 })
 
   // 1) 侧栏工具列表来自后端 /api/tools：期望清单现取，装了什么就比什么
@@ -1169,6 +1174,41 @@ try {
       '启动器：搜名字命中 HTML 胶囊',
       Array.isArray(vaultCapsules),
       'capsules_dir 为空 / 未配置，本条只验清单取数成功',
+    )
+  }
+
+  // 13) 插件自带面板：装了带 panel 的插件就必须**真的渲染**出来（不是 iframe 空壳）
+  //     没装这类插件时只验「不该出现的占位」不出现——CI 里没有第三方插件，跳过要如实说出来。
+  const panelTools = (await fetch(`${URL}api/tools`).then((r) => r.json()).catch(() => null))
+    ?.tools?.filter((t) => t.panel) ?? []
+  if (!panelTools.length) {
+    check('插件面板：未安装带面板的插件（跳过渲染断言）', true, 'no tool declares presentation.panel')
+  } else {
+    const target = panelTools[0]
+    await page.goto(`${URL}?tool=${target.id}`, { waitUntil: 'networkidle' })
+    const frame = page.locator('iframe.tool-panel-frame')
+    await frame.waitFor({ state: 'visible', timeout: 15000 })
+    const src = await frame.getAttribute('src')
+    check(
+      `插件面板：${target.id} 的 iframe 指向插件自己的 URL`,
+      src === target.panel,
+      `src=${src} expected=${target.panel}`,
+    )
+    // 面板内容是插件自己的 HTML：等它把控件或文本画出来，别只验 iframe 存在
+    const inner = page.frameLocator('iframe.tool-panel-frame')
+    const probe = await inner.locator('body').evaluate((body) => ({
+      text: (body.innerText ?? '').trim(),
+      controls: body.querySelectorAll('input, textarea, button, select').length,
+    }))
+    check(
+      '插件面板：面板内部真的画出了内容（文本或控件）',
+      probe.controls > 0 || probe.text.length > 0,
+      `controls=${probe.controls} text=${probe.text.slice(0, 80).replace(/\n/g, ' ')}`,
+    )
+    check(
+      '插件面板：不再显示「这个工具还没有面板」占位',
+      !/还没有面板|no panel yet/i.test(await mainText()),
+      (await mainText()).slice(0, 120).replace(/\n/g, ' '),
     )
   }
 

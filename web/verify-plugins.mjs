@@ -162,7 +162,7 @@ async function api(path, init) {
   const text = await resp.text()
   let body = null
   try { body = JSON.parse(text) } catch { /* 非 JSON */ }
-  return { status: resp.status, body, text }
+  return { status: resp.status, body, text, contentType: resp.headers.get('content-type') ?? '' }
 }
 
 async function toolIds() {
@@ -271,7 +271,24 @@ function loaderSemantics() {
     `exit=${rb.code} ${rb.err.split('\n').filter((l) => l.includes('ValueError')).join(' ')}`,
   )
 
-  // c) 同一份坏声明 + disabled 标记 = 逃生舱（先于 manifest 校验）
+  // c) 面板路径越界：启动即报错，不留到请求时（CSP 是卫生，不是沙箱；路径是契约）
+  const c2 = pluginFixture('bad-panel', {
+    manifest: {
+      schema: 2, version: '0.1.0', id: 'bad-panel', name: '面板越界', icon: '💥',
+      description: 'panel 指向插件目录之外', trust: 'full',
+      presentation: { panel: '../outside.html' },
+    },
+    code: 'TOOL_META = {}\n',
+  })
+  const rd = runPython(DISCOVER, { YHUB_CONFIG_DIR: c2.root })
+  check(
+    '加载语义：panel 路径越界 = 启动报错并点名字段',
+    rd.code !== 0 && rd.err.includes('bad-panel/plugin.json.presentation.panel'),
+    `exit=${rd.code} ${rd.err.split('\n').filter((l) => l.includes('panel')).join(' ').slice(0, 200)}`,
+  )
+  rmSync(c2.root, { recursive: true, force: true })
+
+  // d) 同一份坏声明 + disabled 标记 = 逃生舱（先于 manifest 校验）
   writeFileSync(join(b.dir, 'disabled'), '')
   const rc = runPython(DISCOVER, { YHUB_CONFIG_DIR: b.root })
   check(
@@ -348,6 +365,33 @@ async function main() {
       `工具清单 = 基线 + ${PLUGIN_ID}（不多不少）`,
       sameSet(toolsNow, [...baseTools, PLUGIN_ID]),
       JSON.stringify(toolsNow),
+    )
+
+    // 面板：声明 → /api/tools 带 URL → 路由原样吐插件自己的 HTML（宿主不编译、不注入）
+    check(
+      '面板：声明了 presentation.panel 的工具带 panel URL',
+      entry?.panel === `/api/plugins/${PLUGIN_ID}/panel`,
+      `panel=${JSON.stringify(entry?.panel)}`,
+    )
+    const panelResp = await api(`/api/plugins/${PLUGIN_ID}/panel`)
+    check(
+      '面板：GET /api/plugins/<id>/panel 原样返回插件目录里的 HTML',
+      panelResp.status === 200
+        && /text\/html/.test(panelResp.contentType)
+        && panelResp.text.includes('example-plugin-panel-marker'),
+      `status=${panelResp.status} type=${panelResp.contentType} bytes=${panelResp.text.length}`,
+    )
+    const coreTool = (await api('/api/tools')).body.tools.find((t) => !t.panel && t.id !== PLUGIN_ID)
+    check(
+      '面板：没声明面板的工具不带 panel 字段（不是空字符串）',
+      !!coreTool && !('panel' in coreTool),
+      `tool=${coreTool?.id} keys=${coreTool ? Object.keys(coreTool).join(',') : '-'}`,
+    )
+    const unknownPanel = await api('/api/plugins/no-such-plugin/panel')
+    check(
+      '面板：未装插件的面板 URL 404（不是 500）',
+      unknownPanel.status === 404,
+      `status=${unknownPanel.status}`,
     )
 
     const cellsNow = await cellList()
@@ -471,6 +515,7 @@ async function main() {
           && !!helloPayload.error && typeof helloPayload.hint === 'string'),
       `exit=${helloJson.code} ${helloJson.out.trim().slice(0, 160)}`,
     )
+    // 面板跟着插件走：禁用后路由不再服务
     await stopBackend()
 
     // ---- 阶段 C：disabled 标记（D3 过渡开关）---------------------------
@@ -481,6 +526,12 @@ async function main() {
       'disabled：/api/tools 条目消失（清单回到基线）',
       sameSet(toolsDisabled, baseTools),
       JSON.stringify(toolsDisabled),
+    )
+    const panelDisabled = await api(`/api/plugins/${PLUGIN_ID}/panel`)
+    check(
+      'disabled：插件面板 URL 不再服务（404）',
+      panelDisabled.status === 404,
+      `status=${panelDisabled.status}`,
     )
     const cellsDisabled = await cellList()
     check(

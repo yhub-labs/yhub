@@ -97,6 +97,10 @@ Why an iframe instead of importing the plugin's React component: the frontend is
 
 Rules the loader enforces at startup (a bad declaration is red, never a dead page): the value is a string, a relative path inside the plugin directory (no `..`, no absolute), and the file exists. `panel/index.html?q=你` is the plugin's own business — `zdic` uses it for shareable deep links.
 
+Serving is gated on the **loaded** plugin set, not on the directory: a plugin marked `disabled` leaves its files in place, and its panel must disappear with its tool. Every "no screen here" case — unknown id, installed but not loaded, no declaration, file deleted after install — answers **404**, so a script can tell "gone" from "the host broke".
+
+Two plugins ship panels today: [zdic](https://github.com/yhub-labs/yhub-plugin-zdic) (character lookup, `?q=` deep links) and [memos](https://github.com/yhub-labs/yhub-plugin-memos) (your memos by day, with a compose box). Both are single HTML files with no build step.
+
 The old React panels for `zdic` / `memos` / `gemini` remain in `yhub-labs/yhub-plugins/<id>/panel/` as reference implementations; they import host modules and do not build standalone. A plugin that wants a real screen should ship a single HTML file instead.
 
 `cells.<id>.*` in `dashboard.json` always wins last (`enabled/zone/order/title/href/stale_after/critical` + same-named `params` keys).

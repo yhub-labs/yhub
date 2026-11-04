@@ -56,7 +56,7 @@ pub const DEFAULT_PORT: u16 = 8790;
 
 /// Minimum backend version the shell requires. Below it the UI must not pretend to be healthy (an
 /// old backend may lack new endpoints).
-pub const MIN_BACKEND_VERSION: &str = "0.1.3";
+pub const MIN_BACKEND_VERSION: &str = "0.1.4";
 
 fn version_lt(version: &str, minimum: &str) -> bool {
     fn parts(v: &str) -> Vec<u32> {

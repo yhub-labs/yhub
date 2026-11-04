@@ -33,6 +33,7 @@
   },
   "presentation": {
     "launcher": true,
+    "panel": "panel/index.html",
     "tiles": [
       {
         "id": "example.ok",

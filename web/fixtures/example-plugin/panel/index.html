@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>示例面板</title></head>
+<body>
+  <!-- Marker the acceptance script asserts: the host served the plugin's own file. -->
+  <h1 id="marker">example-plugin-panel-marker</h1>
+  <p>面板来自 web/fixtures/example-plugin/panel/index.html，宿主只负责提供，不参与构建。</p>
+  <script>document.getElementById('marker').dataset.loaded = String(true)</script>
+</body>
+</html>
