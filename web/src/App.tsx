@@ -58,7 +58,7 @@ function toolKeywords(id: string): string | undefined {
 }
 
 export default function App() {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const pathname = window.location.pathname
   const appMatch = pathname.match(/^\/apps\/([a-zA-Z0-9_-]+)/)
   const isSettingsPath = pathname === '/settings'
@@ -741,7 +741,10 @@ export default function App() {
                   Tools with neither a core panel nor a declared one say so. */}
               {panelUrl && (
                 <iframe
-                  key={panelUrl}
+                  // Remount on language change: a panel reads the UI language once at load, so a
+                  // stale frame would keep the old language (and old server-rendered labels) until
+                  // the user reopens the tool.
+                  key={`${panelUrl}::${lang}`}
                   src={panelUrl}
                   title={current?.name ?? active}
                   className="tool-panel-frame"

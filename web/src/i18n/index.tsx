@@ -107,17 +107,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [lang])
 
   // `ui_language` in the config is the durable language choice (the backend renders its own strings
-  // and the tray with it); localStorage only makes boot fast. Adopt the config value when this
-  // webview has no choice yet — otherwise a cleared profile shows an English UI while the backend
-  // keeps answering in Chinese, and every server-rendered tool name disagrees with the sidebar.
+  // and the tray with it); localStorage is only a fast path that this effect itself fills in on the
+  // first commit — so it can never be used as the "has the user chosen?" signal. That mistake made
+  // every fresh profile render in English while the backend answered in Chinese. The config wins
+  // whenever it carries a language; localStorage is the fallback when it does not.
   useEffect(() => {
-    let stored: string | null = null
-    try {
-      stored = window.localStorage.getItem(STORAGE_KEY)
-    } catch {
-      /* no storage: fall through to the config */
-    }
-    if (isLang(stored)) return
     let active = true
     void fetch('/api/settings')
       .then((r) => (r.ok ? r.json() : null))
