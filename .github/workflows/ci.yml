@@ -2,11 +2,26 @@ name: ci
 
 on:
   push:
+    branches: [main] # tag pushes must not duplicate this run — the release workflows cover a tag,
+                     # and a second macOS job in the same minute is what starved the queue
   pull_request:
+  workflow_dispatch:
+
+# One run per ref: a new commit cancels the previous one instead of racing for runners.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
-    runs-on: macos-latest
+  # Everything that does not need macOS. This used to be the whole suite on a macOS runner, which
+  # made ordinary pushes compete with the dmg build for the same scarce pool: jobs that never got a
+  # runner sat for 15 minutes and were cancelled with no logs (`runner_name: ""`, no steps) — which
+  # reads like a mysterious red ci. Linux runners are plentiful and every step here is
+  # platform-neutral (packaging/verify-backend.sh shells out to curl/uv/python only,
+  # verify-plugins.mjs uses no browser).
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,6 +50,30 @@ jobs:
       - name: 外置插件机制验收
         working-directory: web
         run: node verify-plugins.mjs
+
+  # The one part that genuinely needs macOS: the Tauri shell. `tauri` embeds `web/dist`, so the
+  # frontend has to exist before `cargo test` even compiles.
+  shell:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: 前端依赖
+        working-directory: web
+        run: npm ci
+      - name: 前端产物（tauri 的 build.rs 会把它嵌进二进制）
+        run: make web
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tauri -> target
       - name: Rust 单测（配置 / 后端桥接）
         working-directory: tauri
         run: cargo test
