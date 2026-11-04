@@ -22,8 +22,10 @@ import { ToolIcon } from '../icons/ToolIcon'
  *
  * Enable/disable uses the settings shell's `setKey` (writes `plugins.<id>._enabled`, the same semantics
  * as `yhub plugin enable/disable` and the shell settings page, **no backend restart**); install/remove
- * use the backend plugin endpoints, whose CLI equivalent is `yhub plugin install / remove`. The UI only
- * renders and submits — it never builds paths or touches the filesystem.
+ * use the backend plugin endpoints, whose CLI equivalent is `yhub plugin install / remove`. The backend
+ * rebuilds its registry in place on every one of those, so `restart_required` in the response decides
+ * whether the notice mentions a restart (see `withRestart`). The UI only renders and submits — it never
+ * builds paths or touches the filesystem.
  */
 
 const BTN = 'ui-btn ui-btn--sm'
@@ -36,6 +38,15 @@ function errorText(e: unknown): string {
     return `${e.message}${e.hint ? `${sep}${e.hint}` : ''}`
   }
   return String(e)
+}
+
+/**
+ * `restart_required` is what the backend actually did, not a fixed sentence: install / remove / enable in
+ * the GUI rebuild the registry in place (False, the tool shows up immediately), while a CLI install has no
+ * live hook to call (True). Append the restart note only when it is really needed.
+ */
+function withRestart(text: string, needed?: boolean): string {
+  return needed ? `${text}${t('settings.plugins.notify.restartSuffix')}` : text
 }
 
 function KindBadge({ kind }: { kind: PluginEntry['kind'] }) {
@@ -222,7 +233,7 @@ export default function PluginsSection({ settings: currentSettings, setKey, noti
           body: JSON.stringify({ id: entry.id }),
         })
         const body = await r.json().catch(() => null)
-        if (body?.ok) notify(okText, 'info')
+        if (body?.ok) notify(withRestart(okText, body.restart_required), 'info')
         else
           notify(
             t('settings.plugins.notify.failed', { error: body?.error ?? `HTTP ${r.status}` }),
@@ -259,10 +270,13 @@ export default function PluginsSection({ settings: currentSettings, setKey, noti
       try {
         const r = await pluginCatalog.install(entry.id)
         notify(
-          t('settings.plugins.notify.installedVersion', {
-            name: entry.name,
-            version: r.version ?? '',
-          }),
+          withRestart(
+            t('settings.plugins.notify.installedVersion', {
+              name: entry.name,
+              version: r.version ?? '',
+            }),
+            r.restart_required,
+          ),
           'info',
         )
         await Promise.all([load(), loadCatalog()])
@@ -288,7 +302,10 @@ export default function PluginsSection({ settings: currentSettings, setKey, noti
     try {
       const r = await pluginCatalog.install(value)
       notify(
-        t('settings.plugins.notify.installedVersion', { name: r.id, version: r.version ?? '' }),
+        withRestart(
+          t('settings.plugins.notify.installedVersion', { name: r.id, version: r.version ?? '' }),
+          r.restart_required,
+        ),
         'info',
       )
       setSpec('')
@@ -330,7 +347,10 @@ export default function PluginsSection({ settings: currentSettings, setKey, noti
         const r = await pluginCatalog.update(id)
         notify(
           r.updated.length
-            ? t('settings.plugins.notify.updated', { id })
+            ? withRestart(
+                t('settings.plugins.notify.updated', { id }),
+                r.updated.some((u) => u.restart_required),
+              )
             : t('settings.plugins.notify.noUpdateFor', { id }),
           'info',
         )
@@ -353,7 +373,13 @@ export default function PluginsSection({ settings: currentSettings, setKey, noti
     setMarketBusy('all')
     try {
       const r = await pluginCatalog.updateAll()
-      notify(t('settings.plugins.notify.updatedAll', { count: r.updated.length }), 'info')
+      notify(
+        withRestart(
+          t('settings.plugins.notify.updatedAll', { count: r.updated.length }),
+          r.updated.some((u) => u.restart_required),
+        ),
+        'info',
+      )
       await Promise.all([load(), checkUpdates()])
     } catch (e) {
       notify(

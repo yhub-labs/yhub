@@ -21,11 +21,47 @@ from __future__ import annotations
 import importlib
 import pkgutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from yhub.i18n import tr
 
 from ._plugin_loader import check_tiles, iter_external_modules, plugins_dir  # noqa: F401 (used by docs)
+
+
+# ------------------------------------------- Registry change hooks (plugin set changed at runtime)
+#
+# The GUI registers its routes **once** when the process starts, but a third-party plugin can be
+# installed, removed, enabled or disabled while it runs. Adapters must not import `yhub.server.main`
+# (main imports adapters: that is a cycle), so the host leaves a callback here and every code path that
+# changes the plugin set calls `notify_registry_change()`: the tool list and the routes then follow the
+# plugin set without a backend restart.
+_registry_hooks: list[Callable[[], Any]] = []
+
+
+def on_registry_change(hook: Callable[[], Any]) -> None:
+    """Register a callback run whenever the plugin set / enable state changes (GUI: rebuild routes)."""
+    if hook not in _registry_hooks:
+        _registry_hooks.append(hook)
+
+
+def notify_registry_change() -> bool:
+    """Tell the host the plugin set changed (install / remove / enable / disable / config write).
+
+    Returns True when a live host rebuilt its registry (so the change is already in effect — no
+    restart needed) and False with no hook (CLI process: the running GUI keeps its old registry) or
+    when the hook refused (a broken declaration; the host logged it).
+
+    The hook owns its error handling; this function never raises, because losing a settings write over
+    a broken plugin declaration would be worse than serving a stale tool list.
+    """
+    rebuilt = bool(_registry_hooks)
+    for hook in list(_registry_hooks):
+        try:
+            if not hook():
+                rebuilt = False
+        except Exception:  # noqa: BLE001 — the host logs the reason; never break the caller
+            rebuilt = False
+    return rebuilt
 
 
 class ToolError(Exception):

@@ -109,6 +109,10 @@ EN = {
     "plugins.err.code_meta_value": "must be a callable or a scalar",
     "plugins.err.json_parse": "JSON parse failed (line {line}): {message}",
     "plugins.err.unreadable": "cannot read: {reason}",
+    "plugins.err.locales_parse": "locales JSON parse failed (line {line}): {message}",
+    "plugins.err.locales_not_object": "locales file must be a JSON object of key → text, got {type}",
+    "plugins.err.locales_bad_entry": "locales entries must be string → string; bad keys: {keys}",
+    "plugins.err.locales_missing_keys": "the manifest uses @keys that the locales do not define: {keys}",
     "plugins.err.plugin_py_missing": "missing plugin.py (the directory convention = plugin.json + plugin.py)",
     # ------------------------------------------------------------ install / remove (plugin_manager.py)
     "plugins.err.download_failed": "download failed: {url} ({reason})",
@@ -329,6 +333,10 @@ ZH = {
     "plugins.err.code_meta_value": "要是可调用对象或标量",
     "plugins.err.json_parse": "JSON 解析失败（第 {line} 行）：{message}",
     "plugins.err.unreadable": "读不了：{reason}",
+    "plugins.err.locales_parse": "locales JSON 解析失败（第 {line} 行）：{message}",
+    "plugins.err.locales_not_object": "locales 文件必须是「键 → 文本」的 JSON 对象，实际是 {type}",
+    "plugins.err.locales_bad_entry": "locales 的条目必须是「字符串 → 字符串」，有问题的键：{keys}",
+    "plugins.err.locales_missing_keys": "manifest 里用到、但 locales 没定义的键：{keys}",
     "plugins.err.plugin_py_missing": "缺 plugin.py（目录约定 = plugin.json + plugin.py）",
     # ------------------------------------------------------------ install / remove (plugin_manager.py)
     "plugins.err.download_failed": "下载失败：{url}（{reason}）",

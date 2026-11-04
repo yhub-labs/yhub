@@ -492,6 +492,10 @@ def manifest_config(plugin_id: str) -> list[dict]:
     cfg = raw.get("config")
     if not isinstance(cfg, list):
         return []
+    from ._plugin_i18n import prepare as _prepare_i18n
+
+    # `help` may be `@key`; resolve through the plugin's own locales so the settings page is translated.
+    _prepare_i18n({"id": plugin_id, "config": cfg}, path.parent)
     return [
         item for item in cfg
         if isinstance(item, dict) and isinstance(item.get("key"), str) and item["key"]
@@ -503,7 +507,7 @@ def manifest_config(plugin_id: str) -> list[dict]:
 
 def _import_plugin(code_path: Path) -> Any | None:
     """Import plugin.py by file path. A failing import = skip + warn once (startup never crashes)."""
-    key = code_path.resolve()
+    key = _code_key(code_path)
     if key in _loaded:
         return _loaded[key]
     if key in _failed:
@@ -612,12 +616,30 @@ def _merge(manifest: dict, module: Any, dir_path: Path, code_meta: Any) -> dict:
 # -------------------------------------------------------------- discovery entry
 
 
-#: External modules exec'd once per process (key = absolute path of plugin.py)
-_loaded: dict[Path, Any] = {}
+#: External modules exec'd once per file version (key = plugin.py path + inode + mtime + size)
+_loaded: dict[tuple, Any] = {}
 #: Raw TOOL_META archived at import time (module.TOOL_META is overwritten by the merge; remerging needs this)
-_code_meta: dict[Path, Any] = {}
-#: Import failures (key = absolute plugin.py path → first failure reason, warned only once)
-_failed: dict[Path, str] = {}
+_code_meta: dict[tuple, Any] = {}
+#: Import failures (same key → first failure reason, warned only once)
+_failed: dict[tuple, str] = {}
+
+
+def _code_key(code_path: Path) -> tuple:
+    """Cache key of one plugin.py: path + inode + mtime + size.
+
+    Why the stat and not just the path: a plugin can be uninstalled and reinstalled (or updated in
+    place) **while the process runs** — the registry rebuild then has to load the new code, not the
+    module object from the previous version. `st_ino` catches the one case mtime misses: installs copy
+    the tree with `copytree` (which preserves mtime), so a same-size edit can land on an identical
+    (mtime, size) pair — a fresh file is a new inode, though. A reinstall of the very same file still
+    hits the cache.
+    """
+    try:
+        path = code_path.resolve()
+        st = path.stat()
+    except OSError:
+        return (code_path.resolve(), 0, 0, 0)
+    return (path, st.st_ino, st.st_mtime_ns, st.st_size)
 
 
 def iter_external_modules() -> Iterator[Any]:
@@ -625,8 +647,9 @@ def iter_external_modules() -> Iterator[Any]:
     imports skipped).
 
     ``plugin.json`` is re-read every round (declaration edits apply on the next request); ``plugin.py``
-    is exec'd only once. A bad declaration raises ``ValueError`` here (red at startup); an import error
-    degrades here (warn + skip).
+    is exec'd only once **per file version** (a reinstall or update replaces the cached module, so a
+    live registry rebuild serves the new code). A bad declaration raises ``ValueError`` here (red at
+    startup); an import error degrades here (warn + skip).
     """
     root = plugins_dir()
     try:
@@ -664,6 +687,14 @@ def iter_external_modules() -> Iterator[Any]:
                        tr("plugins.err.json_parse", line=exc.lineno, message=exc.msg))
         except OSError as exc:
             raise _bad(f"{dir_path.name}/plugin.json", tr("plugins.err.unreadable", reason=exc.strerror or exc))
+        # Translate **before** validating: the length/format limits must apply to the text the user
+        # actually sees, not to the `@key` placeholder (`@tile.tasks.title` is longer than TITLE_LIMIT).
+        from ._plugin_i18n import LOCALES_DIR as _LOCALES_DIR, prepare as _prepare_i18n
+
+        unresolved = _prepare_i18n(raw, dir_path)
+        if unresolved:
+            raise _bad(f"{dir_path.name}/{_LOCALES_DIR}", tr(
+                "plugins.err.locales_missing_keys", keys=", ".join(sorted(unresolved)[:6])))
         manifest = _validate_manifest(raw, dir_path)
         from yhub import __version__
 
@@ -688,6 +719,6 @@ def iter_external_modules() -> Iterator[Any]:
         module = _import_plugin(code_path)
         if module is None:
             continue  # the import failure was already warned about: degrade honestly, no blank screen
-        key = code_path.resolve()
+        key = _code_key(code_path)
         module.TOOL_META = _merge(manifest, module, dir_path, _code_meta.get(key))
         yield module

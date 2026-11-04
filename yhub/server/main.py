@@ -13,6 +13,7 @@ Adding a tool does not require touching this file.
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import webbrowser
@@ -21,12 +22,12 @@ from urllib.parse import urlsplit
 
 import yhub.cli.env  # noqa: F401
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .adapters import ToolError, discover_adapters, discover_routes
+from .adapters import ToolError, discover_adapters, discover_routes, on_registry_change
 from .adapters.params import apply_route_params
 from yhub.i18n import tr_text
 
@@ -37,6 +38,7 @@ from yhub.i18n import tr
 ROOT = Path(__file__).resolve().parent.parent  # = yhub/ (same layout in source tree and wheel)
 DIST = frontend_dist() or (ROOT / "web" / "dist")
 VERSION = __version__
+LOG = logging.getLogger("yhub.server")
 
 app = FastAPI(
     title="Y-Hub",
@@ -211,6 +213,12 @@ async def _tool_error(_request, exc: ToolError):
 
 _registered_adapters: list[dict] = []
 
+# Marks the endpoint functions a route was registered from. Adapter routes are **rebuilt** while the
+# server runs (a plugin can be installed / removed / disabled from the settings page), so they have to
+# be findable in `app.router.routes`; capability ROUTES and the hand-written API never carry the mark and
+# are therefore left alone.
+_ADAPTER_ROUTE_MARK = "__yhub_adapter_route__"
+
 # Route method table, shared by adapters and capability-style modules (ROUTES).
 # HEAD / OPTIONS / PUT exist for capsules in the library (/capsules/*): single-file apps
 # (TiddlyWiki and friends) probe OPTIONS + DAV headers to decide the server can save,
@@ -227,32 +235,103 @@ _HTTP_METHODS = {
 }
 
 
-def _register_adapters():
-    """Scan the adapters package and register routes and tool metadata.
+def _build_adapter_routes(metas: list[dict]) -> list:
+    """Register every adapter's ``faces.routes`` on a **scratch** router and return the routes.
 
-    Routes live in ``meta["faces"]["routes"]`` (declarative params in
-    ``adapters/params.py``): routes that declare ``params`` get their endpoint signature
-    rewritten by ``apply_route_params`` so HTTP/MCP/CLI share one params spec; those that
-    do not keep their own signature.
+    Building them aside keeps the splice in `_splice_adapter_routes` in charge of where the block
+    goes, so a rebuild does not move adapter routes behind later-registered paths and change which
+    route wins a matching contest.
+
+    Routes live in ``meta["faces"]["routes"]`` (declarative params in ``adapters/params.py``): routes
+    that declare ``params`` get their endpoint signature rewritten by ``apply_route_params`` so
+    HTTP/MCP/CLI share one params spec; those that do not keep their own signature.
     """
-    for entry in discover_adapters():
-        meta = entry["meta"]
+    scratch = APIRouter()
+    verbs = {
+        "GET": scratch.get,
+        "POST": scratch.post,
+        "PUT": scratch.put,
+        "HEAD": scratch.head,
+        "OPTIONS": scratch.options,
+        "DELETE": scratch.delete,
+    }
+    for meta in metas:
         faces = meta.get("faces") or {}
         for route in faces.get("routes", []):
-            register = _HTTP_METHODS.get(route["method"].upper())
-            if register is not None:
-                if route.get("params") is not None:
-                    where = f"{meta['id']}:{route['path']}"
-                    apply_route_params(route["endpoint"], route, where=where)
-                register(route["path"])(route["endpoint"])
-        _registered_adapters.append(meta)
-    # Capability-style modules (e.g. capsule hosting in yhub/server/adapters/capsules.py):
-    # routes only, no launcher tool entry
+            register = verbs.get(str(route["method"]).upper())
+            if register is None:
+                continue
+            if route.get("params") is not None:
+                where = f"{meta['id']}:{route['path']}"
+                apply_route_params(route["endpoint"], route, where=where)
+            endpoint = route["endpoint"]
+            try:
+                setattr(endpoint, _ADAPTER_ROUTE_MARK, True)
+            except (AttributeError, TypeError):
+                pass  # a builtin / slot wrapper: then the route simply cannot be rebuilt
+            register(route["path"])(endpoint)
+    return list(scratch.routes)
+
+
+def _splice_adapter_routes(routes: list) -> None:
+    """Swap the adapter route block in `app.router.routes`, **in place** (same match-order slot)."""
+    kept = []
+    start: int | None = None
+    for route in app.router.routes:
+        if getattr(getattr(route, "endpoint", None), _ADAPTER_ROUTE_MARK, False):
+            if start is None:
+                start = len(kept)
+            continue
+        kept.append(route)
+    if start is None:
+        start = len(kept)
+    kept[start:start] = routes
+    app.router.routes[:] = kept
+
+
+def _register_adapters() -> None:
+    """(Re)build the adapter registry: routes + the tool metadata behind ``/api/tools``.
+
+    Called once at import and again by `refresh_adapters` whenever the plugin set changes, so this
+    must stay **idempotent**: it replaces the previous adapter routes instead of adding a second copy.
+    """
+    metas = [entry["meta"] for entry in discover_adapters()]
+    _splice_adapter_routes(_build_adapter_routes(metas))
+    _registered_adapters[:] = metas
+    app.openapi_schema = None  # /api/docs must describe the routes that exist now
+
+
+def refresh_adapters() -> bool:
+    """Rebuild the registry after the plugin set changed (install / remove / enable / disable).
+
+    Why it exists: the settings page can install and uninstall plugins **while the backend runs**. A
+    removed plugin whose tool stayed in `/api/tools` showed up in the sidebar as "this tool has no
+    panel yet", and a fresh install had no working routes at all — both are the same frozen snapshot.
+
+    A bad declaration makes `discover_adapters` raise ValueError (red at startup, by design). Here it
+    must not take a working server down: keep the previous registry, log loudly, and report failure to
+    the caller (the plugin endpoints pass it on as `restart_required`).
+    """
+    try:
+        _register_adapters()
+    except ValueError as exc:
+        LOG.error("[adapters] 插件声明有问题，沿用上一份工具表（下次启动会直接报错）：%s", exc)
+        return False
+    return True
+
+
+on_registry_change(refresh_adapters)
+
+
+def _register_capability_routes() -> None:
+    """Capability-style modules (e.g. capsule hosting in yhub/server/adapters/capsules.py): routes
+    only, no launcher tool entry. Registered once — they ship with the software and never change."""
     for route in discover_routes():
         _HTTP_METHODS[route["method"]](route["path"])(route["endpoint"])
 
 
 _register_adapters()
+_register_capability_routes()
 
 
 @app.get("/api/health")
@@ -262,8 +341,10 @@ def health() -> dict:
 
 @app.get("/api/tools")
 def tools() -> dict:
+    """The tool list behind the sidebar / launcher (`_registered_adapters` is rebuilt live, so a
+    plugin installed or removed while the server runs appears / disappears without a restart)."""
     tool_list = []
-    for meta in _registered_adapters:
+    for meta in list(_registered_adapters):  # copy: a rebuild may replace the list from the event loop
         ready_fn = meta.get("ready")
         status_fn = meta.get("status")
         ready = ready_fn() if callable(ready_fn) else bool(ready_fn)

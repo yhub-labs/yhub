@@ -909,6 +909,13 @@ def set_values(pairs: dict[str, Any]) -> tuple[dict[str, Any], Path]:
         resolved = default_value(key) if value is None else value
         working = apply_value(working, key, resolved)
     path = write_settings(working, raw)
+    if any(key == "plugins" or key.startswith("plugins.") for key in pairs):
+        # Enable / disable arrives here (`plugins.<id>._enabled`, from the settings page and the CLI's
+        # `plugin enable/disable`): the host rebuilds its tool list + routes so the sidebar follows
+        # immediately instead of showing a disabled plugin until the next restart.
+        from . import notify_registry_change  # noqa: PLC0415 — adapters/__init__ owns the hook list
+
+        notify_registry_change()
     return working, path
 
 
@@ -917,6 +924,10 @@ def reset_values(key: str | None = None) -> tuple[dict[str, Any], Path]:
     if key is None:
         fresh = defaults()
         path = write_settings(fresh, {})
+        # Whole-file reset restores `plugins` too (= every plugin enabled again): rebuild the registry.
+        from . import notify_registry_change  # noqa: PLC0415
+
+        notify_registry_change()
         return fresh, path
     value = default_value(key)
     if isinstance(value, dict) and value:

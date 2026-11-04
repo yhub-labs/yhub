@@ -41,7 +41,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
-from yhub.i18n import tr, tr_text
+from yhub.i18n import current_lang, tr, tr_text
 
 from . import _plugin_loader as L
 
@@ -53,6 +53,21 @@ class PluginError(Exception):
         super().__init__(message)
         self.message = message
         self.hint = hint
+
+
+def _notify_registry_changed() -> bool:
+    """The installed plugin set / enable state changed → the running host must rebuild its registry.
+
+    Otherwise `/api/tools` and the routes stay the snapshot taken at startup: an uninstalled plugin's
+    tool kept sitting in the sidebar as "this tool has no panel yet", and a fresh install had no
+    working routes. Returns True when the change is already live (no restart needed).
+
+    The import is local because ``adapters/__init__`` is the package this module lives in (top-level
+    would be fine but the cycle is one edit away from biting).
+    """
+    from . import notify_registry_change  # noqa: PLC0415
+
+    return notify_registry_change()
 
 
 # ----------------------------------------------------- install sources / lock / registry
@@ -172,8 +187,8 @@ def _normalize_registry(data: dict) -> list[dict]:
         out.append({
             **item,
             "id": pid,
-            "name": str(item.get("name") or pid),
-            "description": str(item.get("description") or ""),
+            "name": _pick_lang(item, "name", pid),
+            "description": _pick_lang(item, "description", ""),
             "author": str(item.get("author") or ""),
             "version": str(item.get("version") or ""),
             "repo": repo,
@@ -184,6 +199,17 @@ def _normalize_registry(data: dict) -> list[dict]:
             "min_yhub": str(item.get("min_yhub") or ""),
         })
     return out
+
+
+def _pick_lang(item: dict, field: str, default: str) -> str:
+    """Registry metadata is bilingual: `name`/`description` are English, `name_zh`/`description_zh`
+    are optional Chinese overrides. Registry entries are fetched, never installed, so they cannot use
+    the `locales/` mechanism — two explicit fields keep the JSON readable in a diff."""
+    if current_lang() == "zh-CN":
+        zh = item.get(f"{field}_zh")
+        if isinstance(zh, str) and zh.strip():
+            return zh
+    return str(item.get(field) or default)
 
 
 def fetch_registry(*, refresh: bool = False) -> list[dict]:
@@ -526,7 +552,21 @@ def _install_github(
 
 
 def install_spec(spec: str, *, force: bool = False, ref: str = "") -> dict:
-    """Single entry point: local directory / GitHub / registry id."""
+    """Single entry point: local directory / GitHub / registry id.
+
+    A successful install notifies the registry hook, so the GUI picks the new plugin up **without a
+    restart** (its routes are registered and its tool appears in `/api/tools`).
+    """
+    result = _install_spec(spec, force=force, ref=ref)
+    # `restart_required` is honest, not decorative: in the GUI process the hook has already rebuilt
+    # the registry (tool list + routes), so nothing needs restarting; the CLI's own process has no
+    # hook, and the running GUI there still holds the previous registry.
+    result["restart_required"] = not _notify_registry_changed()
+    return result
+
+
+def _install_spec(spec: str, *, force: bool = False, ref: str = "") -> dict:
+    """The install itself (see `install_spec`: same signature, no registry notification)."""
     spec = spec.strip()
     if not spec:
         raise PluginError(tr("plugins.err.spec_required"))
@@ -642,6 +682,15 @@ def _manifest_of(dir_path: Path) -> dict:
         raise PluginError(tr("plugins.err.manifest_not_json",
                              path=f"{dir_path.name}/plugin.json",
                              line=exc.lineno, message=exc.msg)) from None
+    # Management commands never import plugin code, but they still render the manifest: resolve
+    # `@key` through the plugin's own `locales/` first, so limits apply to the final text and
+    # `yhub plugin list` is translated too.
+    from ._plugin_i18n import prepare as _prepare_i18n
+
+    missing = _prepare_i18n(raw, dir_path)
+    if missing:
+        raise PluginError(tr("plugins.err.locales_missing_keys", keys=", ".join(sorted(missing)[:6])),
+                          hint=tr("plugins.err.hint_plugin_dir_convention"))
     return L._validate_manifest(raw, dir_path)  # noqa: SLF001 — same package internals: validation exists once
 
 
@@ -803,6 +852,9 @@ def remove_plugin(plugin_id: str, *, purge: bool = False) -> dict:
     purged = False
     if purge:
         purged = _patch_plugin_section(plugin_id, remove=True)
+    # The plugin's code is gone from disk: rebuild the registry so its tool disappears from the
+    # sidebar and its routes stop answering (until now both were frozen at startup).
+    _notify_registry_changed()
     return {"id": plugin_id, "installed": False, "purged_config": purged, "path": str(dest)}
 
 
@@ -860,4 +912,7 @@ def set_enabled(plugin_id: str, enabled: bool) -> dict:
                           hint=tr("plugins.err.hint_plugin_list_names"))
 
     _patch_plugin_section(plugin_id, key=L.ENABLED_KEY, value=bool(enabled))
+    # Enable / disable is a registry change: a disabled plugin's faces (routes / MCP / CLI) and its
+    # cells go away, so the running host has to rebuild instead of serving the startup snapshot.
+    _notify_registry_changed()
     return {"id": plugin_id, "enabled": bool(enabled)}

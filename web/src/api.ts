@@ -876,13 +876,15 @@ export const pluginCatalog = {
       { method: 'POST', body: JSON.stringify({ spec, ...opts }) },
     ),
   update: (id: string) =>
-    request<{ ok: true; updated: { id: string }[]; skipped: { id: string; reason: string }[] }>(
-      '/api/plugin-update',
-      { method: 'POST', body: JSON.stringify({ id }) },
-    ),
+    request<{
+      ok: true
+      updated: { id: string; version?: string; restart_required?: boolean }[]
+      skipped: { id: string; reason: string }[]
+    }>('/api/plugin-update', { method: 'POST', body: JSON.stringify({ id }) }),
   updateAll: () =>
-    request<{ ok: true; updated: { id: string }[]; skipped: { id: string; reason: string }[] }>(
-      '/api/plugin-update',
-      { method: 'POST', body: JSON.stringify({ all: true }) },
-    ),
+    request<{
+      ok: true
+      updated: { id: string; version?: string; restart_required?: boolean }[]
+      skipped: { id: string; reason: string }[]
+    }>('/api/plugin-update', { method: 'POST', body: JSON.stringify({ all: true }) }),
 }

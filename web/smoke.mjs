@@ -72,6 +72,14 @@ try {
     expectedTools.length > 0 && expectedTools.every((n) => nav.includes(n)),
     `expected=${JSON.stringify(expectedTools)} nav=${nav.replace(/\n/g, ' ')}`,
   )
+  // 反向也要对：**多出来的条目就是幽灵**（卸载/禁用插件后残留的「这个工具还没有面板」）。
+  // 只比工具分组（aside nav），搜索/设置/桌面是固定入口，不参与对账。
+  const navTools = (await page.locator('aside nav button').allInnerTexts()).map((s) => s.trim())
+  check(
+    '侧栏工具条目与 /api/tools 完全一致（多一条幽灵也算失败）',
+    navTools.length === expectedTools.length && navTools.every((n, i) => n === expectedTools[i]),
+    `nav=${JSON.stringify(navTools)} expected=${JSON.stringify(expectedTools)}`,
+  )
   // 设置现在是侧栏顶部的固定入口（配置工具已退役进设置中心），不再占工具清单的一条
   check('侧栏顶部有设置入口', /设置/.test(nav), nav.replace(/\n/g, ' '))
 

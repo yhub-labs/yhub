@@ -94,6 +94,41 @@ def tr_text(text: str) -> str:
     return _TEXT_EN.get(text, text)
 
 
+def register_plugin_catalog(plugin_id: str, catalogs: dict[str, dict[str, str]]) -> None:
+    """Register a plugin's own translations under the ``plugins.<id>.`` namespace.
+
+    ``catalogs`` maps a language tag to a flat key/value map, e.g.
+    ``{"en": {"name": "Zdic"}, "zh-CN": {"name": "汉典"}}`` read from
+    ``<plugin>/locales/en.json`` and ``locales/zh-CN.json``. Plugins own their
+    strings: the host catalog only ever holds the core's own keys.
+    """
+    _load_catalogs()
+    prefix = f"plugins.{plugin_id}."
+    for lang, mapping in catalogs.items():
+        if not isinstance(mapping, dict):
+            continue
+        target = _ZH if normalize_lang(lang) == "zh-CN" else _EN
+        for key, value in mapping.items():
+            target[f"{prefix}{key}"] = str(value)
+
+
+def plugin_text(plugin_id: str, value: str) -> str:
+    """Resolve one manifest/declaration string for a plugin.
+
+    ``@key`` → the plugin's own catalog (``plugins.<id>.key``); anything else is a
+    legacy literal and goes through :func:`tr_text` (the core adapters' model).
+    A missing key returns the source string unchanged, so a typo stays visible in
+    the UI instead of turning into an empty label.
+    """
+    if not isinstance(value, str) or not value.startswith("@"):
+        return tr_text(value) if isinstance(value, str) else value
+    _load_catalogs()
+    key = f"plugins.{plugin_id}.{value[1:]}"
+    table = _ZH if current_lang() == "zh-CN" else _EN
+    return table.get(key, value)
+
+
+
 def tr(key: str, **params: Any) -> str:
     _load_catalogs()
     lang = current_lang()

@@ -422,8 +422,10 @@ assert app_etag, "GET 胶囊必须给 ETag（单文件应用靠它做冲突检�
 
 # ---- 胶囊隔离：浏览器请求只能访问自己的文件夹（服务端 Referer 校验 + CSP 收口）----
 # 自测口径：有 Sec-Fetch-* 才算浏览器；curl/脚本（本脚本）不带这些头，仍可运维读写。
-def browser_headers(referer=None, mode="cors", site="same-origin"):
+def browser_headers(referer=None, mode="cors", site="same-origin", dest=None):
     h = {"Sec-Fetch-Site": site, "Sec-Fetch-Mode": mode}
+    if dest:
+        h["Sec-Fetch-Dest"] = dest
     if referer:
         # Referer 是 HTTP 头：非 ASCII 必须百分号编码（浏览器也这么做）
         h["Referer"] = base + quote(referer, safe="/")
@@ -435,9 +437,23 @@ status, _, _ = call("/capsules/" + quote("看板") + "/index.html",
                     headers=browser_headers("/capsules/panel"))
 assert status == 403, f"胶囊读别人的入口应当 403，实际 {status}"
 status, _, _ = call("/capsules/panel.html", headers=browser_headers())
-assert status == 403, f"没有 Referer 的浏览器请求应当 403（防 no-referrer 绕过），实际 {status}"
+assert status == 403, f"没有 Referer 的同源 fetch 应当 403（防 no-referrer 绕过），实际 {status}"
 status, _, _ = call("/capsules/panel.html", headers=browser_headers(mode="navigate", site="none"))
 assert status == 200, f"地址栏打开胶囊应当放行，实际 {status}"
+# 启动器用 window.open(url, '_blank', 'noopener,noreferrer') 开胶囊：没有 Referer，但 Chrome 仍按发起方
+# 算出 sec-fetch-site: same-origin（它不看 Referer 头）。这是**用户点开胶囊**的主路径，必须放行。
+status, _, _ = call("/capsules/panel.html",
+                    headers=browser_headers(mode="navigate", site="same-origin", dest="document"))
+assert status == 200, f"启动器无 Referer 地打开胶囊（same-origin 导航）应当放行，实际 {status}"
+# 主界面 / 设置页的普通链接：Referer 存在但不在 /capsules/ 下 → 正常导航，放行
+status, _, _ = call("/capsules/panel.html",
+                    headers={**browser_headers(mode="navigate", site="same-origin", dest="document"),
+                             "Referer": base + "/"})
+assert status == 200, f"从主界面打开胶囊应当放行，实际 {status}"
+# 无 Referer 的 iframe 导航（referrerPolicy=no-referrer）必须仍然 403：父页面能读它的 DOM
+status, _, _ = call("/capsules/panel.html",
+                    headers=browser_headers(mode="navigate", site="same-origin", dest="iframe"))
+assert status == 403, f"无 Referer 的 iframe 导航应当 403（否则可绕开隔离读 DOM），实际 {status}"
 status, _, _ = call("/api/capsules", headers=browser_headers("/capsules/panel"))
 assert status == 403, f"胶囊调宿主 /api 应当 403，实际 {status}"
 status, _, _ = call("/api/capsules", headers={"Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "cors"})
@@ -463,7 +479,7 @@ assert status == 200, f"读沙盒 HTML 失败：HTTP {status}"
 csp_page = page_headers.get("Content-Security-Policy", "")
 assert "/capsules/" + quote("看板") in csp_page and "default-src 'none'" in csp_page, \
     f"沙盒 HTML 也要有按胶囊收口的 CSP：{csp_page!r}"
-print("PASS 胶囊隔离：自己的文件夹可读写、别人的 403、无 Referer 的浏览器请求 403、宿主 /api 403、CSP 只放本胶囊")
+print("PASS 胶囊隔离：自己的文件夹可读写、别人的 403、无 Referer 的 fetch/iframe 403、启动器与地址栏打开放行、宿主 /api 403、CSP 只放本胶囊")
 
 # ---- 子域开关（配置默认关闭；开启后胶囊走 <slug>.localhost，Host 即身份）----
 call("/api/settings", method="PUT", data=json.dumps({"key": "capsules_subdomains", "value": True}).encode(),

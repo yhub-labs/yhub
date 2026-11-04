@@ -87,6 +87,44 @@ def main() -> int:
     pm.remove_plugin("regdemo")
     check("卸载后目录与 lock 都清掉", not dest.exists() and "regdemo" not in (pm.read_lock()["plugins"]))
 
+    # ---- 装/卸/启停必须让**正在运行**的宿主重建注册表（GUI 的工具表与路由不再冻在启动那一刻）----
+    # 症状：从设置页卸掉插件后，侧栏还留着一个「这个工具还没有面板」的幽灵。
+    from yhub.server.adapters import discover_adapters, on_registry_change
+
+    calls: list[str] = []
+    on_registry_change(lambda: calls.append("rebuild") or True)
+    calls.clear()
+    result = pm.install_spec(str(src), force=True)
+    check("安装后通知宿主重建（工具表 + 路由），且不需要重启",
+          calls == ["rebuild"] and result["restart_required"] is False, f"{calls} {result!r}")
+    calls.clear()
+    pm.set_enabled("regdemo", False)
+    check("启/停也通知宿主重建（禁用一个插件要连同三面一起收起）", calls == ["rebuild"], repr(calls))
+    pm.set_enabled("regdemo", True)
+    calls.clear()
+    pm.remove_plugin("regdemo")
+    check("卸载后通知宿主重建（侧栏里不能再留幽灵条目）", calls == ["rebuild"], repr(calls))
+
+    def status_of(plugin_id: str) -> str:
+        for entry in discover_adapters():
+            if entry["meta"]["id"] == plugin_id:
+                fn = entry["meta"].get("status")
+                return fn() if callable(fn) else str(fn)
+        return ""
+
+    (src / "plugin.py").write_text('TOOL_META = {"status": lambda: "v1"}\n', encoding="utf-8")
+    pm.install_spec(str(src), force=True)
+    check("重装同一版本也重新载入代码（缓存键不只认路径）", status_of("regdemo") == "v1", status_of("regdemo"))
+    (src / "plugin.py").write_text('TOOL_META = {"status": lambda: "v2"}\n', encoding="utf-8")
+    pm.install_spec(str(src), force=True)
+    check("插件更新后载入的是新代码（无需重启后端）", status_of("regdemo") == "v2", status_of("regdemo"))
+
+    # 宿主没能重建（声明冲突导致上一份工具表被沿用）时，restart_required 必须说实话
+    on_registry_change(lambda: False)
+    result = pm.install_spec(str(src), force=True)
+    check("宿主重建失败时如实报 restart_required", result["restart_required"] is True, repr(result))
+    pm.remove_plugin("regdemo")
+
     # 兼容性门禁
     bad = make_plugin(version="9.0.0", min_yhub="99.0.0")
     bad_archive = make_tar(bad)

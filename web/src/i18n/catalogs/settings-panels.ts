@@ -206,17 +206,18 @@ export const en = {
   'settings.plugins.notify.failed': 'Failed: {error}',
   'settings.plugins.notify.enabled': '{name} enabled',
   'settings.plugins.notify.disabled': '{name} disabled',
-  'settings.plugins.notify.installed': 'Installed {name} (takes effect after restarting the backend)',
-  'settings.plugins.notify.installedVersion':
-    'Installed {name} {version} (takes effect after restarting the backend)',
+  'settings.plugins.notify.installed': 'Installed {name}',
+  'settings.plugins.notify.installedVersion': 'Installed {name} {version}',
+  // Only appended when the backend says `restart_required`: the GUI backend rebuilds its registry
+  // in place, so install/remove/disable show up immediately (the CLI is what needs a restart).
+  'settings.plugins.notify.restartSuffix': ' (takes effect after restarting the backend)',
   'settings.plugins.notify.removed': 'Uninstalled {name}',
   'settings.plugins.notify.noUpdates': 'No updates available',
   'settings.plugins.notify.checkFailed': 'Update check failed: {error}',
-  'settings.plugins.notify.updated': 'Updated {id} (takes effect after restarting the backend)',
+  'settings.plugins.notify.updated': 'Updated {id}',
   'settings.plugins.notify.noUpdateFor': 'No update for {id}',
   'settings.plugins.notify.updateFailed': 'Update failed: {error}',
-  'settings.plugins.notify.updatedAll':
-    'Updated {count} plugins (takes effect after restarting the backend)',
+  'settings.plugins.notify.updatedAll': 'Updated {count} plugins',
   'settings.plugins.notify.saveFailed': 'Save failed: {error}',
   'settings.plugins.notify.registrySaved': 'Plugin source saved',
   'settings.plugins.confirm.github':
@@ -237,7 +238,7 @@ export const en = {
   'settings.plugins.third.empty': 'No third-party plugins yet.',
   'settings.plugins.market.title': 'Plugin marketplace',
   'settings.plugins.market.description':
-    'Install third-party plugins from the registry index. The list only renders; downloading, verifying and writing to disk all happen in the backend; the backend must be restarted before the code is loaded.',
+    'Install third-party plugins from the registry index. The list only renders; downloading, verifying and writing to disk all happen in the backend, which then reloads its registry — the tool appears right away.',
   'settings.plugins.market.footer':
     'The registry is a static JSON (id / name / repo / archive / version). Command-line equivalents: yhub plugin search / install / update.',
   'settings.plugins.market.registryAria': 'Plugin source URL',
@@ -475,15 +476,16 @@ export const zhCN = {
   'settings.plugins.notify.failed': '失败：{error}',
   'settings.plugins.notify.enabled': '{name} 已启用',
   'settings.plugins.notify.disabled': '{name} 已禁用',
-  'settings.plugins.notify.installed': '已安装 {name}（重启后端后生效）',
-  'settings.plugins.notify.installedVersion': '已安装 {name} {version}（重启后端后生效）',
+  'settings.plugins.notify.installed': '已安装 {name}',
+  'settings.plugins.notify.installedVersion': '已安装 {name} {version}',
+  'settings.plugins.notify.restartSuffix': '（重启后端后生效）',
   'settings.plugins.notify.removed': '已卸载 {name}',
   'settings.plugins.notify.noUpdates': '没有可用更新',
   'settings.plugins.notify.checkFailed': '检查更新失败：{error}',
-  'settings.plugins.notify.updated': '已更新 {id}（重启后端后生效）',
+  'settings.plugins.notify.updated': '已更新 {id}',
   'settings.plugins.notify.noUpdateFor': '没有更新 {id}',
   'settings.plugins.notify.updateFailed': '更新失败：{error}',
-  'settings.plugins.notify.updatedAll': '已更新 {count} 个插件（重启后端后生效）',
+  'settings.plugins.notify.updatedAll': '已更新 {count} 个插件',
   'settings.plugins.notify.saveFailed': '保存失败：{error}',
   'settings.plugins.notify.registrySaved': '插件源已保存',
   'settings.plugins.confirm.github':
@@ -502,7 +504,7 @@ export const zhCN = {
   'settings.plugins.third.empty': '还没有第三方插件。',
   'settings.plugins.market.title': '插件市场',
   'settings.plugins.market.description':
-    '从 registry 索引安装第三方插件。列表只负责展示，下载/校验/落盘全在后端；装完需要重启后端才加载代码。',
+    '从 registry 索引安装第三方插件。列表只负责展示，下载/校验/落盘全在后端，装完后端会立即重建工具表——工具马上出现。',
   'settings.plugins.market.footer':
     'registry 是一个静态 JSON（id / name / repo / archive / version）。命令行等价：yhub plugin search / install / update。',
   'settings.plugins.market.registryAria': '插件源地址',

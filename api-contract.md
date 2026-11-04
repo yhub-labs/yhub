@@ -105,9 +105,11 @@ Core plugins are the built-in adapters (`rclone`, `rss`, `scheduler`); everythin
 | POST | `/api/plugin-remove` | `{"id", purge?}` | `{"ok","id","installed":false,"purged_config","path"}` |
 
 `config` is the declaration only (defaults + help); current values come from `GET /api/settings`.
-Installing never restarts the backend (code loads on the next start), core plugins are disable-able
-but not removable, `plugin-catalog` is 400 without a registry, and `enable`/`disable` are CLI-only
-(`yhub plugin enable|disable <id>`, writing `plugins.<id>._enabled`).
+Install / remove / enable / disable apply **immediately** in the serving process: the backend rebuilds
+its routes and `/api/tools` in place, so `restart_required` is `true` only when no live registry was
+rebuilt (a CLI install while the GUI runs; also on a broken declaration, which keeps the previous
+registry and logs). Core plugins are disable-able but not removable, `plugin-catalog` is 400 without a
+registry, and `enable`/`disable` use `plugins.<id>._enabled` (`yhub plugin enable|disable <id>`).
 
 ## 8. Dashboard (`dashboard.py` → `_dashboard_sources.py`)
 

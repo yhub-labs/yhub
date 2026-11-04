@@ -18,11 +18,14 @@ from ._cell_fetch import safe_url, strip_userinfo
 # Display limits (summary clipped to 80 chars, at most 5 detail rows).
 from ._cell_fetch import DETAIL_LIMIT, SUMMARY_LIMIT
 
-# Timezone: user-facing time text uses Asia/Shanghai.
+# Clip helper: plugins produce cell summaries, so they must clip the same way the host does.
+from ._cell_fetch import clip
+
+# Timezone: user-facing time text follows the machine (TZ env overrides it).
 from ._cell_fetch import TZ
 
 __all__ = [
-    "ok", "err",
+    "ok", "err", "clip",
     "http_probe", "when_text",
     "safe_url", "strip_userinfo",
     "DETAIL_LIMIT", "SUMMARY_LIMIT",

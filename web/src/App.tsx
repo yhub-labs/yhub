@@ -353,7 +353,11 @@ export default function App() {
   const closeSettings = useCallback(() => {
     setViewMode(settingsReturnView.current)
     window.history.pushState({}, '', '/')
-  }, [])
+    // The settings page can install / remove / enable / disable plugins, and the sidebar + launcher
+    // render `/api/tools`: re-read it on the way back, otherwise the workbench still lists a plugin
+    // that is no longer there (the backend has already rebuilt its registry).
+    void refresh()
+  }, [refresh])
 
   // "Settings…" in the tray menu: the Rust side emits 'yhub:open-settings' with a section id after
   // show_panel, and this switches the panel to the settings view (the ?view=settings deep link is

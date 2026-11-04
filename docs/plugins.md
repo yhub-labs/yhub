@@ -18,7 +18,7 @@ The config root is `YHUB_CONFIG_DIR` (default `~/.config/yhub`).
 └── disabled        # optional: present = not loaded (escape hatch, outranks the config switch)
 ```
 
-Load semantics: `plugin.json` is re-read on every discovery (edit → next request picks it up); `plugin.py` is exec'd once per process (code changes need a backend restart; a failed import is cached and warned once). Directory name must match `^[a-z0-9][a-z0-9-]{0,63}$`, equal `id`, and not start with `.`/`_`.
+Load semantics: `plugin.json` is re-read on every discovery (edit → next request picks it up); `plugin.py` is exec'd once per file version (key = path + mtime + size, so a reinstall/update loads the new code; a failed import is cached and warned once). Install / remove / enable / disable run through the registry hook (`adapters.on_registry_change`): the GUI backend rebuilds its routes and `/api/tools` in place, so no restart is needed there — a separate process (CLI) also rebuilds its own registry but the running GUI, which has no hook, still holds the old one until it restarts. Directory name must match `^[a-z0-9][a-z0-9-]{0,63}$`, equal `id`, and not start with `.`/`_`.
 
 ## 2. `plugin.json` (schema 2)
 
@@ -155,7 +155,7 @@ Registry (marketplace index) is a static JSON at `plugins_registry_url` — `{"s
 | bad directory name / no `plugin.json` | skip + warning (not a plugin directory) |
 | `enable.default = false` | skip + one log line |
 | bad `plugin.json` (JSON, unknown key, field) / no `plugin.py` | `ValueError` locating `<id>/plugin.json.<field>` — startup red, never silent |
-| `plugin.py` import raises | that plugin skipped + warning once; the rest keeps running (restart to retry) |
+| `plugin.py` import raises | that plugin skipped + warning once; the rest keeps running (edit the file — the cache key carries mtime/size — or restart to retry) |
 | declaration field in `TOOL_META` | `ValueError` → `<id>/plugin.py.TOOL_META` |
 | unresolved `handler`/`fetch` name, colliding MCP name / CLI command / route / tile id, reserved `overview.alerts` | `ValueError` naming the location and both ids |
 
@@ -164,3 +164,44 @@ Registry (marketplace index) is a static JSON at `plugins_registry_url` — `{"s
 ## 8. Verifying
 
 `make verify-plugins` runs `scripts/verify-plugin-install.py` (offline: manifest v2, registry, archive, lock) and then `web/verify-plugins.mjs`, which picks a free port, starts its own backend and an isolated config root, installs `web/fixtures/example-plugin/`, then asserts: the launcher entry, both tiles (one always-green, one always-failing → `source_error` with message + hint), MCP tool, CLI subcommand + `--json`, the config declaration; the `disabled` escape hatch removes all of them; a bad import is skipped while a bad declaration raises with a location; and `git status --porcelain` is unchanged afterwards. Plugins are installed only under the config root — the repo stays clean.
+
+## 9. Translating a plugin
+
+A plugin owns its strings: the core catalog's `TEXT_EN` model only works for adapters that live in this repository, because the host cannot know what a third-party plugin says. So translations travel **with the plugin**:
+
+```text
+<plugin-id>/
+  plugin.json
+  plugin.py
+  locales/en.json      # flat {"key": "text"}; {param} placeholders are filled by the host
+  locales/zh-CN.json
+```
+
+The host registers the catalogs as `plugins.<id>.<key>` when the plugin loads, and resolves every `@key` it finds in the manifest:
+
+| Where | Example |
+| --- | --- |
+| `name`, `description` | `"name": "@name"` |
+| tile title | `"title": "@tile.tasks.title"` |
+| config help | `"help": "@config.token.help"` |
+| route / MCP / CLI `help` and `description`, params, body `fields`, CLI subcommands | `"help": "@param.traditional"` |
+
+In code, `translator` binds the namespace once:
+
+```python
+from yhub.plugin_api import ToolError, translator
+
+t = translator("zdic")
+raise ToolError(t("err.no_word", word=word), hint=t("err.hint.network"))
+```
+
+Three rules that follow from how this is wired:
+
+* **`@key` is resolved before the manifest is validated**, so `title` (≤16 chars) and `description` (≤120) limits apply to the translated text, not to the placeholder.
+* **A missing key is a startup error** naming `<id>/locales` and the keys, not a silent `@key` on screen.
+* **`keywords` stay bilingual** in one string (`"zdic handian 字典 查字"`): they are search terms for the launcher, not display text.
+* **Log lines and docstrings are not translated** (`docs/i18n.md`: developer-facing). Only what a user sees goes through the catalog.
+
+Registry entries are fetched, never installed, so they cannot use `locales/`: they carry `name`/`description` in English plus optional `name_zh`/`description_zh`, and the host picks by `ui_language`.
+
+The plugin repository verifies all of this with `python3 scripts/verify-i18n.py`: locale parity, every `@key` and every `t("…")` call site defined in both languages, no user-facing Chinese literal left in code, and registry entries bilingual.

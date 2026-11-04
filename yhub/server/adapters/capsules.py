@@ -771,6 +771,10 @@ def _sandbox_resolve(relpath: str) -> tuple[Path, Path] | None:
 # capsules in the system and user layers are the same capsule (the data directory falls back from
 # system to user anyway).
 _BROWSER_HEADERS = ("sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest")
+# Navigation destinations that embed another document **inside** the current page (an iframe can be
+# scripted by its parent). Those never pass without a same-capsule Referer; a top-level document
+# navigation may, because it replaces the page instead of handing its DOM to someone else.
+_FRAME_DESTS = {"iframe", "frame", "embed", "object"}
 
 
 def _browser_request(request: Request) -> bool:
@@ -839,9 +843,20 @@ def _scope_denied(request: Request, relpath: str, scope: str | None) -> bool:
 
     - non-browser (curl / scripts / tests) → allowed: local ops and acceptance keep working;
     - Referer under `/capsules/...` → must name the same capsule as this request;
-    - no Referer → only top-level navigation (address bar / external link) passes; a capsule's
-      `fetch(..., {referrerPolicy:'no-referrer'})` does not produce that combination and is refused;
-    - Referer is `/` or another non-capsule page → allowed (launcher / main UI opening a capsule).
+    - Referer is `/` / `/?view=settings` / any non-capsule page → allowed: that is the main UI (or
+      another site) sending the user to a capsule with a normal link click. The Referer is **present**
+      here, so it says nothing about another capsule;
+    - **no Referer at all** → the Referer was stripped (`rel=noreferrer`, a `window.open(...,
+      'noreferrer')` from the launcher, an external link, the address bar). Then only a **document**
+      navigation passes: a capsule's `fetch(..., {referrerPolicy:'no-referrer'})` is `mode=cors` /
+      `same-origin`, and an `<iframe>` navigation is `dest=iframe`, so both stay refused.
+
+    Why the referer-present / referer-absent split matters: the launcher opens a capsule with
+    `window.open(url, '_blank', 'noopener,noreferrer')` → no Referer **and** `sec-fetch-site:
+    same-origin` (Chrome derives it from the initiator, not from the header). Keying the fallback off
+    `sec-fetch-site` therefore 403'd the launcher's own "open capsule" click; keying it off
+    `sec-fetch-dest` keeps the no-referrer fetch/iframe bypass closed and does not depend on whether a
+    Referer happens to survive.
     """
     if scope is None:
         return False
@@ -852,12 +867,16 @@ def _scope_denied(request: Request, relpath: str, scope: str | None) -> bool:
             return True
     if not _browser_request(request):
         return False
-    ref_rel = _referer_relpath(request)
-    if ref_rel is not None:
+    if request.headers.get("referer", ""):
+        ref_rel = _referer_relpath(request)
+        if ref_rel is None:
+            return False  # main UI / another site: an ordinary navigation into the capsule
         return _scope_key(ref_rel) != scope
     mode = (request.headers.get("sec-fetch-mode") or "").lower()
-    site = (request.headers.get("sec-fetch-site") or "").lower()
-    return not (mode == "navigate" and site in ("none", "cross-site"))
+    dest = (request.headers.get("sec-fetch-dest") or "").lower()
+    if mode != "navigate":
+        return True  # fetch / XHR / script / image …: no source capsule, no access
+    return dest in _FRAME_DESTS
 
 
 def _main_host_write_forbidden(relpath: str, scope: str | None) -> Response:
