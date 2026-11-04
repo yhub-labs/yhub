@@ -1277,8 +1277,20 @@ mod tests {
         assert!(version_lt("0.0.9", MIN_BACKEND_VERSION));
         assert!(version_lt("0.0.99", MIN_BACKEND_VERSION));
         assert!(!version_lt(MIN_BACKEND_VERSION, MIN_BACKEND_VERSION));
-        assert!(!version_lt("0.1.0", MIN_BACKEND_VERSION));
-        assert!(!version_lt("v0.1.0", MIN_BACKEND_VERSION));
+        // The floor moves with each release that adds a capability plugins or the shell depend on
+        // (0.1.1 = plugins carry their own translations), so derive the "one release below" case
+        // from the constant instead of pinning a literal that goes stale on the next bump.
+        let mut parts: Vec<u32> = MIN_BACKEND_VERSION.split('.').map(|p| p.parse().unwrap()).collect();
+        while let Some(last) = parts.last_mut() {
+            if *last > 0 {
+                *last -= 1;
+                break;
+            }
+            parts.pop();
+        }
+        let below = parts.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(".");
+        assert!(version_lt(&format!("v{below}"), MIN_BACKEND_VERSION), "{below} should count as old");
+        assert!(!version_lt(&format!("v{MIN_BACKEND_VERSION}"), MIN_BACKEND_VERSION));
     }
 
     #[test]
