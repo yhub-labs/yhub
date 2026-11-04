@@ -147,6 +147,7 @@ fn main() {
             commands::reset_settings,
             commands::get_settings_schema,
             commands::get_settings_path,
+            commands::refresh_shell_language,
             commands::backend_status,
             commands::backend_ensure,
             commands::backend_health,

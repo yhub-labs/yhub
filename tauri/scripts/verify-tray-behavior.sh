@@ -87,7 +87,15 @@ PY
 }
 
 write_config() { # write_config <json>
-  printf '%s\n' "$1" >"$CONFIG"
+  # 语言显式钉成 zh-CN：本脚本断言的全是中文文案（系统通知、托盘菜单）。不钉的话 ui_language
+  # 缺失 → 壳回落到英文 → 断言与实现各说各话（这条通知断言曾经一直红）。
+  python3 - "$CONFIG" "$1" <<'PYCFG'
+import json, sys
+cfg = json.loads(sys.argv[2])
+cfg.setdefault("ui_language", "zh-CN")
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump(cfg, fh, ensure_ascii=False)
+PYCFG
 }
 
 run_case() { # run_case <日志名>：跑程序直到自检自己退出（EXTRA_ENV 可追加环境变量）
@@ -132,6 +140,9 @@ run_case a1
 common_checks "默认值"
 A1="$TMP/a1.log"
 check "默认值：启动不显示面板（show_on_start=false）" yes "$(has "$A1" 'startup visibility = show_on_start: got=false want=false OK')"
+check "默认值：托盘按 ui_language=zh-CN 构建（zh-CN 曾经被解析成英文）" yes "$(has "$A1" '\[tray\] built .*lang=ZhCn')"
+check "默认值：托盘菜单是中文" yes "$(has "$A1" '\[tray\] built .*labels=\[\"显示面板\"')"
+check "默认值：切换语言能立刻重贴托盘文案（自检断言）" yes "$(has "$A1" 'tray labels follow ui_language \(zh-CN\): .*OK')"
 check "默认值：左键单击走 toggle_panel" yes "$(has "$A1" '\[tray\] action=toggle_panel source=left_click')"
 check "默认值：一次双击只切换一回（第二个点击按 double_click=none 不响应）" yes "$(has "$A1" 'double click left_click=toggle_panel double_click=none: got=true want=true OK')"
 check "默认值：关窗只隐藏（进程留着）" yes "$(has "$A1" '\[window\] close requested -> hide .*close_behavior=hide')"

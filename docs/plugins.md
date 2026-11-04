@@ -206,3 +206,30 @@ Three rules that follow from how this is wired:
 Registry entries are fetched, never installed, so they cannot use `locales/`: they carry `name`/`description` in English plus optional `name_zh`/`description_zh`, and the host picks by `ui_language`.
 
 The plugin repository verifies all of this with `python3 scripts/verify-i18n.py`: locale parity, every `@key` and every `t("…")` call site defined in both languages, no user-facing Chinese literal left in code, and registry entries bilingual.
+
+## 10. Developing a plugin locally
+
+Two things make a plugin look "live" and each is worth knowing separately:
+
+| Change | Picked up without a restart? |
+| --- | --- |
+| `plugin.py` handler body | no — the HTTP route holds the function object it registered (modules are re-imported per discovery round, routes are not rebound) |
+| `plugin.json` (manifest), `locales/*.json` | no — read once per process for the tool list/catalogs |
+| installing / removing / enabling a plugin **from the UI** | yes — the registry hook rebuilds adapter routes in-process |
+| installing from the CLI | no — the CLI process has no hook, it prints "takes effect after the backend restarts" |
+
+So the loop is "save → process restart", and the only question is making that restart automatic and isolated:
+
+```bash
+make dev-plugin PLUGIN=~/Projects/yhub-plugin-zdic          # backend on 8790, config root build/dev-config
+cd web && npm run dev                                        # UI on 5173, proxies /api to 8790
+```
+
+`scripts/dev-plugin.sh` symlinks the plugin directory into `build/dev-config/plugins/<id>` (gitignored, never `~/.config/yhub`), exports `YHUB_CONFIG_DIR` + `YHUB_LANG`, and runs uvicorn with `--reload` over the plugin directory plus `yhub/server/adapters`. Symlink instead of copy because a copy silently diverges from the checkout you are editing; `--reload-include '*.json'` because uvicorn only watches `*.py` by default and the catalogs are JSON.
+
+A broken manifest or a missing `@key` is fatal at startup by design, so the reload gives you the error instead of a half-new process. Stop the installed app first (it holds 8790), and check the two verifications that a plugin repository carries:
+
+```bash
+python3 scripts/verify-i18n.py          # catalogs, @keys, call sites, leftover Chinese
+python3 scripts/verify-host-load.py     # loads into a real host, en + zh-CN, temp config root
+```

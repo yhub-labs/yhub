@@ -208,6 +208,19 @@ pub fn get_settings_path() -> String {
     config::settings_path().display().to_string()
 }
 
+/// Re-label shell-owned copy (the tray menu) after the UI language changed, returning the effective
+/// shell language (`En` / `ZhCn`) so the UI can log what took effect.
+///
+/// Why a command of its own instead of `set_setting`: `ui_language` is a **backend-owned** key — the
+/// settings page persists it through `/api/settings`, which the shell never sees, and `set_setting`
+/// refuses non-shell keys by design. So the UI has to tell the shell explicitly; the shell then re-reads
+/// the file itself (`i18n::lang`): one source of truth, nothing duplicated over IPC.
+#[tauri::command]
+pub fn refresh_shell_language(app: tauri::AppHandle) -> Result<String, String> {
+    crate::tray::refresh_labels(&app).map_err(|e| format!("刷新托盘文案失败：{e}"))?;
+    Ok(format!("{:?}", crate::i18n::lang()))
+}
+
 // ---------------------------------------------------------------- backend bridge (Python backend)
 //
 // Division of labor: launching / probing / logging / graceful shutdown all live in `backend.rs`

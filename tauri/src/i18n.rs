@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lang {
     En,
     ZhCn,
@@ -13,21 +13,36 @@ pub enum Lang {
 
 pub fn lang() -> Lang {
     if let Ok(raw) = std::env::var("YHUB_LANG") {
-        let lower = raw.trim().to_ascii_lowercase();
-        if lower.starts_with("en") {
-            return Lang::En;
-        }
-        if lower.starts_with("zh") {
-            return Lang::ZhCn;
+        if let Some(lang) = parse_lang(&raw) {
+            return lang;
         }
     }
-    let path = crate::config::settings_path();
-    if let Some(value) = read_ui_language(&path) {
-        if value.starts_with("en") {
-            return Lang::En;
-        }
+    lang_from_settings(&crate::config::settings_path())
+}
+
+/// Language tag → shell language (`en*` → En, `zh*` → ZhCn); None = not a language we ship.
+fn parse_lang(raw: &str) -> Option<Lang> {
+    let lower = raw.trim().to_ascii_lowercase();
+    if lower.starts_with("en") {
+        Some(Lang::En)
+    } else if lower.starts_with("zh") {
+        Some(Lang::ZhCn)
+    } else {
+        None
     }
-    Lang::En
+}
+
+/// Resolve the language from one settings file (default En).
+///
+/// Why this is a function of its own: the earlier version only mapped `en*` explicitly and used
+/// `Lang::En` as the catch-all, so the value the backend actually stores — `"zh-CN"` — fell through to
+/// English. The tray menu then stayed English no matter what the UI said. Keep the mapping total: every
+/// value the backend accepts (`en` / `zh-CN`) must resolve here, and an unknown value falls back to En.
+fn lang_from_settings(path: &Path) -> Lang {
+    read_ui_language(path)
+        .as_deref()
+        .and_then(parse_lang)
+        .unwrap_or(Lang::En)
 }
 
 fn read_ui_language(path: &Path) -> Option<String> {
@@ -115,4 +130,49 @@ pub fn trf(key: &'static str, args: &[(&str, &str)]) -> String {
         out = out.replace(&format!("{{{name}}}"), value);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    /// Every value the backend accepts must resolve to a shell language. `zh-CN` is the one that used to
+    /// fall through to English (the tray showed English after switching the UI language).
+    #[test]
+    fn parse_lang_covers_the_values_the_backend_accepts() {
+        assert_eq!(parse_lang("en"), Some(Lang::En));
+        assert_eq!(parse_lang("zh-CN"), Some(Lang::ZhCn));
+        // Hand-edited / future variants: prefix match, case-insensitive, surrounding blanks ignored
+        assert_eq!(parse_lang("  zh-cn "), Some(Lang::ZhCn));
+        assert_eq!(parse_lang("zh"), Some(Lang::ZhCn));
+        assert_eq!(parse_lang("en-US"), Some(Lang::En));
+        assert_eq!(parse_lang("EN"), Some(Lang::En));
+        // Anything else is not a language we ship: the caller falls back to English
+        assert_eq!(parse_lang("fr"), None);
+        assert_eq!(parse_lang(""), None);
+    }
+
+    /// Read the key from a real settings file: the reported bug was exactly this path.
+    #[test]
+    fn settings_file_language_resolves() {
+        let dir = std::env::temp_dir().join(format!("yhub-i18n-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+
+        for (stored, want) in [("zh-CN", Lang::ZhCn), ("en", Lang::En)] {
+            let mut file = std::fs::File::create(&path).unwrap();
+            write!(file, "{{\"ui_language\": \"{stored}\"}}").unwrap();
+            assert_eq!(lang_from_settings(&path), want, "ui_language={stored}");
+        }
+
+        // Missing key / unreadable file / broken JSON → English, never a panic
+        std::fs::write(&path, "{}").unwrap();
+        assert_eq!(lang_from_settings(&path), Lang::En);
+        std::fs::write(&path, "{not json").unwrap();
+        assert_eq!(lang_from_settings(&path), Lang::En);
+        assert_eq!(lang_from_settings(&dir.join("nope.json")), Lang::En);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

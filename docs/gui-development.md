@@ -40,6 +40,13 @@ launcher and a browser on `dashboard`.
 - Keys: `Cmd/Ctrl+P` pin, `Cmd/Ctrl+,` settings, `Cmd/Ctrl+K` launcher, `Cmd/Ctrl+\` collapse sidebar;
   `ESC` order: leave edit mode → close customize popover → leave settings → workbench → hide. The
   tray's "Settings…" arrives as the `yhub:open-settings` event carrying a section id.
+
+Menu labels are translated once when the tray is built. Because `ui_language` is a **backend-owned** key
+(the settings page persists it through `/api/settings`, and `set_setting` refuses non-shell keys), the
+shell never sees the change by itself: the language selector calls the `refresh_shell_language` command,
+which re-reads `settings.json` and rebuilds the tray menu in the new language (no restart). The same
+resolver, `i18n::lang`, is a total mapping — `en*` → En, `zh*` → ZhCn — so every value the backend accepts
+is handled.
 - Sidebar = `/api/tools` order (adapter scan order, never re-sort); `dashboard` renders as the fixed
   "Desktop" entry. Ids in `PANEL_TOOLS` render a panel, anything else says "no panel yet". The
   outermost `ErrorBoundary` keeps a render crash visible (text + reload), never a blank page.

@@ -5,7 +5,7 @@
 // frontend caches nothing.
 
 import { useState } from 'react'
-import { formatHotkey } from '../../tauriBridge'
+import { formatHotkey, isTauri, tauriBridge } from '../../tauriBridge'
 import { LANGUAGES, useI18n, type Lang } from '../../i18n'
 import { Icon } from '../icons/Icon'
 import {
@@ -72,8 +72,18 @@ export default function GeneralSection({
   const changeLanguage = (next: Lang) => {
     if (next === lang) return
     setLang(next)
-    // Not awaited: a backend write failure must never block the language switch (the toast explains it)
+    // Not awaited: a backend write failure must never block the language switch (the toast explains it).
+    // The shell is told **after the write lands** — it re-labels the tray by re-reading settings.json, so
+    // refreshing first would re-label in the old language (the tray would stay one switch behind).
     void setKey('ui_language', next)
+      .catch(() => null)
+      .then(() => {
+        // The tray menu is shell-owned copy built once at startup and `ui_language` is a backend-owned key,
+        // so the shell never learns about the switch on its own. Tauri only (a browser has no tray); a
+        // failed re-label must not break this click.
+        if (isTauri()) return tauriBridge.refreshShellLanguage().catch(() => null)
+        return null
+      })
   }
 
   const showLog = async () => {

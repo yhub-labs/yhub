@@ -234,6 +234,18 @@ export const tauriBridge = {
     return await invoke<string>('get_settings_path')
   },
 
+  /**
+   * Re-label shell-owned copy (the tray menu) after the UI language changed.
+   *
+   * `ui_language` is a backend-owned key: the settings page persists it through `/api/settings`, and the
+   * shell refuses non-shell keys in `setSetting`, so the shell has to be told here. Returns the shell
+   * language it now uses (`En` / `ZhCn`); `null` in browser mode (there is no tray to re-label).
+   */
+  refreshShellLanguage: async (): Promise<string | null> => {
+    if (!isTauri()) return null
+    return await invoke<string>('refresh_shell_language')
+  },
+
   // ------------------------------------------------------------ library capsules (opened in the system browser)
 
   /**

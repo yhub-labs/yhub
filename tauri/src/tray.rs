@@ -22,7 +22,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewWindow};
 
@@ -105,19 +105,84 @@ static CLICK_STATE: Mutex<ClickState> = Mutex::new(ClickState {
     generation: 0,
 });
 
-/// Build the menu bar status item. Failures only log and do not affect the main flow (window and hotkeys
-/// keep working).
-pub fn build(app: &AppHandle) -> tauri::Result<()> {
+/// Build the right-click menu in the **current** UI language.
+///
+/// Separate from `build` because the labels have to follow `ui_language` while the app runs: the
+/// settings page switches the language through the backend (`/api/settings`), so the shell is told
+/// explicitly and re-labels through `refresh_labels`.
+fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let show = MenuItem::with_id(app, MENU_SHOW, crate::i18n::tr("tray.show"), true, None::<&str>)?;
     let hide = MenuItem::with_id(app, MENU_HIDE, crate::i18n::tr("tray.hide"), true, None::<&str>)?;
     let dashboard = MenuItem::with_id(app, MENU_DASHBOARD, crate::i18n::tr("tray.dashboard"), true, None::<&str>)?;
     let settings = MenuItem::with_id(app, MENU_SETTINGS, crate::i18n::tr("tray.settings"), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, MENU_QUIT, crate::i18n::tr("tray.quit"), true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(
+    Menu::with_items(
         app,
         &[&show, &hide, &dashboard, &separator, &settings, &quit],
-    )?;
+    )
+}
+
+/// Re-label the menu after `ui_language` changed (called by `commands::refresh_shell_language`).
+///
+/// The menu items are built once, so the labels are a snapshot of the language at startup — without
+/// this, switching to 简体中文 left the tray English until the app was restarted. Item ids (and
+/// therefore `on_menu_event`) are stable, so replacing the whole menu keeps every menu action working.
+pub fn refresh_labels(app: &AppHandle) -> tauri::Result<()> {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        eprintln!("[tray] refresh_labels: 托盘未找到");
+        return Ok(());
+    };
+    let menu = menu(app)?;
+    let labels = label_texts(&menu);
+    store_labels(labels.clone());
+    tray.set_menu(Some(menu))?;
+    store_labels(labels.clone());
+    eprintln!("[tray] labels refreshed lang={:?} labels={labels:?}", crate::i18n::lang());
+    Ok(())
+}
+
+/// The visible labels of a built menu, in order (the separator has no text and is skipped).
+///
+/// Read back **out of the menu** rather than re-calling `i18n::tr`, so the log line (and the acceptance
+/// check) shows what macOS will actually display.
+fn label_texts(menu: &Menu<tauri::Wry>) -> Vec<String> {
+    menu.items()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|item| match item {
+            MenuItemKind::MenuItem(item) => item.text().ok(),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Labels of the menu that is installed right now (what `build` / `refresh_labels` last wrote).
+///
+/// Tauri exposes no getter for a tray's menu, so the labels are stored when they are written — this is
+/// what the self-test asserts against, and it is read back **from the menu**, never recomputed from
+/// `i18n::tr` (otherwise the check would only compare a function with itself).
+static MENU_LABELS: Mutex<Option<Vec<String>>> = Mutex::new(None);
+
+fn store_labels(labels: Vec<String>) {
+    match MENU_LABELS.lock() {
+        Ok(mut slot) => *slot = Some(labels),
+        Err(poisoned) => *poisoned.into_inner() = Some(labels),
+    }
+}
+
+pub fn current_labels() -> Vec<String> {
+    let Ok(slot) = MENU_LABELS.lock() else {
+        return Vec::new();
+    };
+    slot.clone().unwrap_or_default()
+}
+
+/// Build the menu bar status item. Failures only log and do not affect the main flow (window and hotkeys
+/// keep working).
+pub fn build(app: &AppHandle) -> tauri::Result<()> {
+    let menu = menu(app)?;
+    let labels = label_texts(&menu);
 
     // Template image (pure alpha; 36px corresponds to 18pt @2x): macOS inverts it automatically for
     // light/dark mode
@@ -193,7 +258,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
 
-    eprintln!("[tray] built id={TRAY_ID}");
+    eprintln!("[tray] built id={TRAY_ID} lang={:?} labels={labels:?}", crate::i18n::lang());
     Ok(())
 }
 
@@ -844,6 +909,36 @@ pub fn spawn_selftest(app: AppHandle) {
             }
         }
 
+        // 6) Tray labels follow the shell language. The settings page switches `ui_language` at runtime and
+        //    the menu items are built once, so `refresh_labels` (the body of
+        //    `commands::refresh_shell_language`) is what makes the switch visible without a restart.
+        //    `YHUB_LANG` stands in for the settings key here: same resolver (`i18n::lang`), and it leaves the
+        //    config file — whose `ui_language` is backend-owned — untouched.
+        {
+            let original = std::env::var("YHUB_LANG").ok();
+            let cases: [(&str, [&str; 5]); 2] = [
+                ("en", ["Show panel", "Hide panel", "Open desktop page", "Settings…", "Quit Y-Hub"]),
+                ("zh-CN", ["显示面板", "隐藏面板", "打开桌面网页", "设置…", "退出 Y-Hub"]),
+            ];
+            for (tag, want) in cases {
+                std::env::set_var("YHUB_LANG", tag);
+                match refresh_labels(&app) {
+                    Ok(()) => expect_labels(
+                        &mut failures,
+                        &format!("tray labels follow ui_language ({tag})"),
+                        &current_labels(),
+                        &want.map(str::to_string),
+                    ),
+                    Err(e) => failures.push(format!("relabel to {tag} failed: {e}")),
+                }
+            }
+            match original {
+                Some(value) => std::env::set_var("YHUB_LANG", value),
+                None => std::env::remove_var("YHUB_LANG"),
+            }
+            let _ = refresh_labels(&app); // restore the labels for later phases
+        }
+
         // While a system dialog (file picker) is open, collapsing must be blocked: collapsing the panel takes
         // the dialog with it while the plugin's sheet is still attached — the user then clicks buttons and
         // nothing happens (measured 2026-09-28).
@@ -1010,6 +1105,15 @@ fn visible(app: &AppHandle) -> bool {
     main_window(app)
         .and_then(|w| w.is_visible().ok())
         .unwrap_or(false)
+}
+
+/// Assert the tray menu's labels (used by the language phase: the labels are what the user sees).
+fn expect_labels(failures: &mut Vec<String>, name: &str, got: &[String], want: &[String]) {
+    let verdict = if got == want { "OK" } else { "FAIL" };
+    eprintln!("[selftest] {name}: got={got:?} want={want:?} {verdict}");
+    if got != want {
+        failures.push(name.to_string());
+    }
 }
 
 fn expect_visible(failures: &mut Vec<String>, name: &str, got: bool, want: bool) {

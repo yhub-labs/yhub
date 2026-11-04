@@ -19,7 +19,7 @@
 #
 # 目标平台目前只有 macOS（Tauri 壳）。Windows/Linux 见 docs/packaging.md。
 
-.PHONY: capsules verify-versions wheel publish install-backend verify-backend verify-cli verify-i18n verify-plugins verify-settings verify-edit-mode web app install install-hooks uninstall-hooks verify-app smoke dashboard plugin-list help
+.PHONY: dev-plugin capsules verify-versions wheel publish install-backend verify-backend verify-cli verify-i18n verify-plugins verify-settings verify-edit-mode web app install install-hooks uninstall-hooks verify-app smoke dashboard plugin-list help
 
 help:
 	@sed -n '2,20p' Makefile | sed 's/^# \{0,1\}//'
@@ -38,6 +38,11 @@ wheel: verify-versions web capsules
 # 只传 wheel：sdist 需要用户本机有 npm/node 先构建前端，不适合作为默认安装路径。
 publish: wheel
 	uv publish dist/*.whl
+
+# 本地开发插件：把插件目录软链进 build/dev-config，起一个 --reload 后端（改 plugin.py / locales 自动重起）。
+#   make dev-plugin PLUGIN=~/Projects/yhub-plugin-zdic [PORT=8790]
+dev-plugin:
+	./scripts/dev-plugin.sh "$(PLUGIN)" $(if $(PORT),--port $(PORT),)
 
 # 本机把当前代码装成 `yhub` 命令（PyPI 同款路径）。
 # 坑：`uv tool install . --force` 会静默复用缓存 wheel（版本号没变时），
