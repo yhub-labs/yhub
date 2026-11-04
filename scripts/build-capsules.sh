@@ -40,15 +40,15 @@ fetch_vendored() {
     mv "$tmp" "$out"
     chmod 644 "$out"  # mktemp 是 600；随包资源按普通只读文件分发
     bytes="$(wc -c < "$out" | tr -d ' ')"
-    echo "== capsules：$name ← $url（$bytes 字节）"
+    echo "== capsules：${name} ← ${url}（${bytes} 字节）"
     return 0
   fi
   rm -f "$tmp"
   if [ -f "$out" ]; then
-    echo "== capsules：⚠ 下载 $name 失败（$url），沿用上一轮产物" >&2
+    echo "== capsules：⚠ 下载 ${name} 失败（${url}），沿用上一轮产物" >&2
     return 0
   fi
-  echo "== capsules：✗ 下载 $name 失败（$url），且没有可复用的产物" >&2
+  echo "== capsules：✗ 下载 ${name} 失败（${url}），且没有可复用的产物" >&2
   return 1
 }
 
