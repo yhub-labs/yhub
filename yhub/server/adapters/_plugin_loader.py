@@ -346,7 +346,7 @@ def _validate_faces(faces: Any, where: str) -> dict:
     return out
 
 
-def _check_panel(entry: Any, dir_path: Path, where: str) -> None:
+def _check_panel(entry: Any, dir_path: Path, where: str, *, check_files: bool = True) -> None:
     """`presentation.panel` is one self-contained HTML file inside the plugin directory.
 
     The host serves it at `/api/plugins/<id>/panel` and the workbench shows it in an iframe, so the
@@ -358,11 +358,15 @@ def _check_panel(entry: Any, dir_path: Path, where: str) -> None:
         raise _bad(where, tr("plugins.err.panel_not_string", value=repr(entry)))
     if ".." in Path(entry).parts or Path(entry).is_absolute():
         raise _bad(where, tr("plugins.err.panel_path", value=repr(entry)))
-    if not (dir_path / entry).is_file():
+    # Existence is only checkable against the real plugin directory: the installer validates a
+    # downloaded manifest by writing *just* `plugin.json` into a scratch dir named after the id
+    # (`_validate_manifest_for_id`), where every sibling file is legitimately absent.
+    if check_files and not (dir_path / entry).is_file():
         raise _bad(where, tr("plugins.err.panel_missing", entry=repr(entry)))
 
 
-def _validate_manifest(raw: Any, dir_path: Path, *, allow_dir_mismatch: bool = False) -> dict:
+def _validate_manifest(raw: Any, dir_path: Path, *, allow_dir_mismatch: bool = False,
+                       check_files: bool = True) -> dict:
     """Anything unreadable / misdeclared is a ValueError locating ``<id>/plugin.json.<field>``, never a silent
     degradation."""
     where = f"{dir_path.name}/plugin.json"
@@ -431,7 +435,7 @@ def _validate_manifest(raw: Any, dir_path: Path, *, allow_dir_mismatch: bool = F
                        tr("plugins.err.launcher_not_bool", value=repr(presentation['launcher'])))
         check_tiles(presentation.get("tiles"), where=p_where)
         if "panel" in presentation:
-            _check_panel(presentation["panel"], dir_path, f"{p_where}.panel")
+            _check_panel(presentation["panel"], dir_path, f"{p_where}.panel", check_files=check_files)
     if "config" in raw:
         cfg = raw["config"]
         if not isinstance(cfg, list):

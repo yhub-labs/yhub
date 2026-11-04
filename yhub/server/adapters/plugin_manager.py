@@ -510,7 +510,8 @@ def _validate_manifest_for_id(raw: dict, plugin_id: str) -> dict:
     try:
         tmp.mkdir(parents=True, exist_ok=True)
         (tmp / "plugin.json").write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
-        return L._validate_manifest(raw, tmp)  # noqa: SLF001
+        # `tmp` holds only plugin.json: file-presence checks belong to the installed directory, not here.
+        return L._validate_manifest(raw, tmp, check_files=False)  # noqa: SLF001
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
