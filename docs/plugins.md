@@ -161,6 +161,12 @@ Install records live in `<config>/plugins.lock.json`:
 
 Registry (marketplace index) is a static JSON at `plugins_registry_url` — `{"schema": 1, "plugins": [{id, name, description, author, version, repo|archive, subdir, ref, min_yhub}]}` (sample: `examples/registry.example.json`). Each entry needs `id` plus one of `repo`/`archive`/`pypi`; **`pypi` entries and `pypi:` specs are rejected — PyPI is not a supported plugin source**. Cached 5 minutes; network failures fall back to the last cache.
 
+The default is the official index, `https://raw.githubusercontent.com/yhub-labs/yhub-plugins/main/registry.json` (`DEFAULT_REGISTRY_URL` in `settings.py`), so `yhub plugin search` and `yhub plugin install <id>` work with no configuration at all. Three things follow from that:
+
+* An **empty** `plugins_registry_url` is a deliberate "no marketplace": the host stops fetching and installs by id stop resolving. Anything else replaces the default outright.
+* Entries pin a **`ref`** (a tag) where the repository has one, so installing by id fetches exactly the version the index names instead of whatever the default branch is today.
+* The index is a *moving document* behind a 5-minute CDN cache, so an edit is not visible instantly — and drift in it decides what everyone installs. That is why `yhub-plugins` runs `scripts/verify-registry.py` (`--network` included) on every push and once a day: an entry must match the plugin's own `plugin.json` (`version`, `min_yhub`, `id`), and this repository's plugin bumps ship their index edit in the same commit.
+
 ## 7. Failure semantics and trust
 
 | Situation | Behavior |

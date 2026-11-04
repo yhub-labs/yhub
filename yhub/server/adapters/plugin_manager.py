@@ -156,12 +156,19 @@ def _read_json_url(url: str) -> dict:
 
 
 def registry_url() -> str:
+    """The marketplace index URL. `read_settings` already merges the default in, so an empty answer
+    means the user turned it off on purpose — only a *broken* settings read falls back to the default."""
     try:
         from .settings import read_settings
 
         return str(read_settings()[0].get("plugins_registry_url") or "").strip()
     except Exception:  # noqa: BLE001
-        return ""
+        try:
+            from .settings import DEFAULT_REGISTRY_URL as fallback
+
+            return fallback
+        except Exception:  # noqa: BLE001
+            return ""
 
 
 def _registry_cache_path() -> Path:
@@ -215,9 +222,11 @@ def _pick_lang(item: dict, field: str, default: str) -> str:
 def fetch_registry(*, refresh: bool = False) -> list[dict]:
     url = registry_url()
     if not url:
+        from .settings import DEFAULT_REGISTRY_URL
+
         raise PluginError(
             tr("plugins.err.registry_not_configured"),
-            hint=tr("plugins.err.hint_set_registry"),
+            hint=tr("plugins.err.hint_set_registry", default=DEFAULT_REGISTRY_URL),
         )
     cache = _registry_cache_path()
     cached: list[dict] | None = None

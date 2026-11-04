@@ -242,7 +242,7 @@ export const en = {
   'settings.plugins.market.footer':
     'The registry is a static JSON (id / name / repo / archive / version). Command-line equivalents: yhub plugin search / install / update.',
   'settings.plugins.market.registryAria': 'Plugin source URL',
-  'settings.plugins.market.registryPlaceholder': 'https://…/registry.json (empty = not configured)',
+  'settings.plugins.market.registryPlaceholder': 'https://…/registry.json (empty = marketplace off)',
   'settings.plugins.saving': 'Saving…',
   'settings.plugins.market.saveRegistry': 'Save plugin source',
   'settings.plugins.market.refresh': 'Refresh',
@@ -252,7 +252,8 @@ export const en = {
   'settings.plugins.market.noRegistryHint':
     'Configure a plugin source first (or on the command line: yhub plugin registry set …)',
   'settings.plugins.market.loading': 'Reading the plugin marketplace…',
-  'settings.plugins.market.noRegistry': 'No plugin source configured yet.',
+  'settings.plugins.market.noRegistry': 'The plugin marketplace is off: the source is empty.',
+  'settings.plugins.market.useDefault': 'Use the official source',
   'settings.plugins.market.empty': 'No matching plugins.',
   'settings.plugins.market.installed': 'Installed{suffix}',
   'settings.plugins.market.updateAvailable': 'Update available',
@@ -508,7 +509,7 @@ export const zhCN = {
   'settings.plugins.market.footer':
     'registry 是一个静态 JSON（id / name / repo / archive / version）。命令行等价：yhub plugin search / install / update。',
   'settings.plugins.market.registryAria': '插件源地址',
-  'settings.plugins.market.registryPlaceholder': 'https://…/registry.json（留空 = 未配置）',
+  'settings.plugins.market.registryPlaceholder': 'https://…/registry.json（留空 = 关闭插件市场）',
   'settings.plugins.saving': '保存中…',
   'settings.plugins.market.saveRegistry': '保存插件源',
   'settings.plugins.market.refresh': '刷新',
@@ -518,7 +519,8 @@ export const zhCN = {
   'settings.plugins.market.noRegistryHint':
     '先配置插件源（或命令行：yhub plugin registry set …）',
   'settings.plugins.market.loading': '读取插件市场…',
-  'settings.plugins.market.noRegistry': '还没有配置插件源。',
+  'settings.plugins.market.noRegistry': '插件市场已关闭：插件源是空的。',
+  'settings.plugins.market.useDefault': '恢复官方插件源',
   'settings.plugins.market.empty': '没有匹配的插件。',
   'settings.plugins.market.installed': '已装{suffix}',
   'settings.plugins.market.updateAvailable': '有更新',

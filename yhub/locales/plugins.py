@@ -128,9 +128,9 @@ EN = {
     "plugins.err.top_level_not_object": "the top level is not a JSON object: {url}",
     "plugins.err.registry_format": "the plugin registry has the wrong format",
     "plugins.err.hint_registry_schema": "expected {\"schema\": 1, \"plugins\": [...]}",
-    "plugins.err.registry_not_configured": "no plugin registry is configured yet",
+    "plugins.err.registry_not_configured": "the plugin marketplace is turned off (empty source)",
     "plugins.err.hint_set_registry": (
-        "set a registry JSON: yhub plugin registry set https://…/registry.json"
+        "turn it back on with `yhub plugin registry set {default}`, or point it at any registry JSON"
     ),
     "plugins.err.not_in_registry": "{id} is not in the plugin registry",
     "plugins.err.hint_plugin_search": "use yhub plugin search to see what is installable",
@@ -357,8 +357,8 @@ ZH = {
     "plugins.err.top_level_not_object": "顶层不是 JSON 对象：{url}",
     "plugins.err.registry_format": "插件源格式不对",
     "plugins.err.hint_registry_schema": "需要 {\"schema\": 1, \"plugins\": [...]}",
-    "plugins.err.registry_not_configured": "还没有配置插件源",
-    "plugins.err.hint_set_registry": "设置一个 registry JSON：yhub plugin registry set https://…/registry.json",
+    "plugins.err.registry_not_configured": "插件市场已关闭（插件源是空的）",
+    "plugins.err.hint_set_registry": "用 yhub plugin registry set {default} 恢复官方源，或指向任意 registry JSON",
     "plugins.err.not_in_registry": "插件源里没有 {id}",
     "plugins.err.hint_plugin_search": "用 yhub plugin search 看可安装的插件",
     "plugins.err.github_not_json": "GitHub API 返回的不是 JSON：{url}",

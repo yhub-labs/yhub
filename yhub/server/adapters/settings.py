@@ -78,6 +78,13 @@ CLICK_BEHAVIORS = ["toggle_panel", "show_menu", "none"]
 
 # Top-level (non-section) keys (version is program-maintained; capsules_dir is the "capsules in your library"
 # directory scanned by yhub/server/adapters/capsules.py)
+
+#: The official plugin index. A registry is a moving index (it points at repositories, not code), so it
+#: is pinned to the branch rather than a tag: entries carry their own `ref`, which is what makes an
+#: install reproducible. Override with `plugins_registry_url`; store an empty string to disable the
+#: marketplace entirely (nothing is fetched, no plugin can be installed by id).
+DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/yhub-labs/yhub-plugins/main/registry.json"
+
 TOP_DEFAULTS: dict[str, Any] = {
     "version": SETTINGS_VERSION,
     "capsules_dir": "",
@@ -89,8 +96,9 @@ TOP_DEFAULTS: dict[str, Any] = {
     "capsules_subdomains_overrides": {},
     # UI / error language: en | zh-CN.
     "ui_language": "en",
-    # Plugin marketplace index (registry JSON URL / file:// / local path); empty = not configured
-    "plugins_registry_url": "",
+    # Plugin marketplace index (registry JSON URL / file:// / local path). Defaults to the official
+    # index; a stored value replaces it, and a stored empty string turns the marketplace off.
+    "plugins_registry_url": DEFAULT_REGISTRY_URL,
 }
 
 # Combos: modifier alias → canonical name. Super/Meta/Command all mean ⌘, Alt means ⌥ (same as Tauri's parser)
@@ -211,7 +219,7 @@ def defaults() -> dict[str, Any]:
         "capsules_disabled": [],
         "capsules_subdomains": False,
         "capsules_subdomains_overrides": {},
-        "plugins_registry_url": "",
+        "plugins_registry_url": DEFAULT_REGISTRY_URL,
         "ui_language": "en",
         # plugins is an open map: empty by default (key = plugin id, value = that plugin's own config object)
         "plugins": {},

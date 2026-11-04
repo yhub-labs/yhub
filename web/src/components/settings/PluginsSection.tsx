@@ -140,7 +140,7 @@ function Row({ entry, busy, onToggle, onInstall, onRemove }: {
   )
 }
 
-export default function PluginsSection({ settings: currentSettings, setKey, notify }: SettingsSectionProps) {
+export default function PluginsSection({ settings: currentSettings, schema, setKey, notify }: SettingsSectionProps) {
   const { t } = useI18n()
   const [entries, setEntries] = useState<PluginEntry[] | null>(null)
   const [error, setError] = useState('')
@@ -154,6 +154,11 @@ export default function PluginsSection({ settings: currentSettings, setKey, noti
   const [marketBusy, setMarketBusy] = useState('')
 
   const registryUrl = currentSettings?.plugins_registry_url || ''
+  // The official index is a backend default, so "empty" now means "turned off" — offer a way back
+  // that does not require knowing the URL by heart.
+  const defaultRegistry = String(
+    (schema?.defaults as Record<string, unknown> | undefined)?.plugins_registry_url ?? '',
+  )
 
   const load = useCallback(async () => {
     try {
@@ -410,6 +415,23 @@ export default function PluginsSection({ settings: currentSettings, setKey, noti
     }
   }, [loadCatalog, notify, registryDraft, setKey, t])
 
+  const restoreRegistry = useCallback(async () => {
+    if (!defaultRegistry) return
+    setMarketBusy('registry')
+    try {
+      const r = await setKey('plugins_registry_url', defaultRegistry)
+      if (!r.ok) {
+        notify(t('settings.plugins.notify.saveFailed', { error: r.error }), 'error')
+        return
+      }
+      setRegistryDraft(null)
+      notify(t('settings.plugins.notify.registrySaved'), 'info')
+      await loadCatalog('', true)
+    } finally {
+      setMarketBusy('')
+    }
+  }, [defaultRegistry, loadCatalog, notify, setKey, t])
+
   const core = (entries ?? []).filter((e) => e.kind === 'core')
   const third = (entries ?? []).filter((e) => e.kind !== 'core')
 
@@ -510,6 +532,21 @@ export default function PluginsSection({ settings: currentSettings, setKey, noti
               {t('settings.plugins.market.search')}
             </button>
           </div>
+          {/* "Off" is a state of its own, not an error from the catalog: show it with the way back,
+              whatever the last catalog call returned (a cleared source makes that call fail). */}
+          {!registryUrl && defaultRegistry ? (
+            <div className="flex flex-wrap items-center gap-2 ui-meta">
+              {t('settings.plugins.market.noRegistry')}
+              <button
+                type="button"
+                className={BTN}
+                disabled={marketBusy === 'registry'}
+                onClick={() => void restoreRegistry()}
+              >
+                {t('settings.plugins.market.useDefault')}
+              </button>
+            </div>
+          ) : null}
           {catalogError ? (
             <div className="text-[12px] text-red-300">
               {catalogError}
@@ -517,9 +554,7 @@ export default function PluginsSection({ settings: currentSettings, setKey, noti
             </div>
           ) : !catalog ? (
             <div className="ui-meta">
-              {registryUrl
-                ? t('settings.plugins.market.loading')
-                : t('settings.plugins.market.noRegistry')}
+              {registryUrl ? t('settings.plugins.market.loading') : ''}
             </div>
           ) : catalog.length === 0 ? (
             <div className="ui-meta">{t('settings.plugins.market.empty')}</div>
