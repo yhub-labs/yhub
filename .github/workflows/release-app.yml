@@ -65,6 +65,11 @@ jobs:
         working-directory: web
         run: npm ci
 
+      - name: Tauri CLI
+        # 仓库里没有 tauri/package.json：本机靠 `cargo install tauri-cli` 的全局命令，
+        # CI 上没有，所以这里装一个（和本机 2.11.x 同大版本）。
+        run: npm install --global @tauri-apps/cli@2
+
       - name: 构建 dmg（ad-hoc 签名）
         # CI=true 让 Tauri 跳过 DMG 的 Finder 排版（那一步要 AppleScript 权限，本机跑都会失败）
         run: |

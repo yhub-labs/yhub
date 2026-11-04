@@ -72,7 +72,7 @@ yhub --version ; yhub gui --no-open
 
 ## Building the `.app`
 
-`make app` runs `tauri build --bundles app`; its `beforeBuildCommand` = `packaging/build-app-assets.sh`, which does `cd web && npm run build` and `./scripts/build-capsules.sh`. The frontend is embedded **at compile time**, so frontend changes require `make app`; the backend is not in the bundle, so nothing Python is built here.
+`make app` runs `tauri build --bundles app` — it needs the Tauri CLI on PATH (`cargo install tauri-cli --version "^2"`, or `npm i -g @tauri-apps/cli@2`; the repository does not vendor it, and CI installs the npm package); its `beforeBuildCommand` = `packaging/build-app-assets.sh`, which does `cd web && npm run build` and `./scripts/build-capsules.sh`. The frontend is embedded **at compile time**, so frontend changes require `make app`; the backend is not in the bundle, so nothing Python is built here.
 
 Backend lookup order (`tauri/src/backend.rs`): port 8790 already serving → `YHUB_BACKEND_BIN` → installed `yhub` (PATH / `~/.local/bin` / Homebrew) → `uv run yhub` from a source tree.
 
