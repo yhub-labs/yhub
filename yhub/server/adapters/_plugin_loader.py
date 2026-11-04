@@ -346,7 +346,7 @@ def _validate_faces(faces: Any, where: str) -> dict:
     return out
 
 
-def _validate_manifest(raw: Any, dir_path: Path) -> dict:
+def _validate_manifest(raw: Any, dir_path: Path, *, allow_dir_mismatch: bool = False) -> dict:
     """Anything unreadable / misdeclared is a ValueError locating ``<id>/plugin.json.<field>``, never a silent
     degradation."""
     where = f"{dir_path.name}/plugin.json"
@@ -371,9 +371,13 @@ def _validate_manifest(raw: Any, dir_path: Path) -> dict:
     if "api" in raw and (not isinstance(raw["api"], int) or isinstance(raw["api"], bool) or raw["api"] < 1):
         raise _bad(f"{where}.api", tr("plugins.err.api_invalid", api=repr(raw['api'])))
     plugin_id = _require_str(raw, "id", where)
+    if allow_dir_mismatch:
+        where = f"{plugin_id}/plugin.json"
     if not _ID_RE.match(plugin_id):
         raise _bad(f"{where}.id", tr("plugins.err.id_invalid", id=repr(plugin_id)))
-    if plugin_id != dir_path.name:
+    # A single-plugin repository's checkout is named after the repository (`yhub-plugin-zdic`), not
+    # after the plugin; installers pass the id explicitly in that case, and this check has to yield.
+    if plugin_id != dir_path.name and not allow_dir_mismatch:
         raise _bad(f"{where}.id", tr("plugins.err.id_dir_mismatch", id=repr(plugin_id),
                                      dir=repr(dir_path.name)))
     _require_str(raw, "name", where, max_len=30)

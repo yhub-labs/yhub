@@ -673,7 +673,7 @@ def update_plugins(plugin_ids: list[str] | None = None) -> dict:
 # ------------------------------------------------------------------ read-only inventory
 
 
-def _manifest_of(dir_path: Path) -> dict:
+def _manifest_of(dir_path: Path, *, allow_dir_mismatch: bool = False) -> dict:
     """Read and validate one plugin directory's manifest (no code loading: management commands need no exec)."""
     manifest_path = dir_path / "plugin.json"
     try:
@@ -694,7 +694,8 @@ def _manifest_of(dir_path: Path) -> dict:
     if missing:
         raise PluginError(tr("plugins.err.locales_missing_keys", keys=", ".join(sorted(missing)[:6])),
                           hint=tr("plugins.err.hint_plugin_dir_convention"))
-    return L._validate_manifest(raw, dir_path)  # noqa: SLF001 — same package internals: validation exists once
+    return L._validate_manifest(raw, dir_path,  # noqa: SLF001 — validation exists once
+                                allow_dir_mismatch=allow_dir_mismatch)
 
 
 def _installed_ids() -> dict[str, Path]:
@@ -797,7 +798,7 @@ def add_plugin(source: str | Path, *, force: bool = False, plugin_id: str | None
         )
     src = src.resolve()
 
-    manifest = _manifest_of(src)
+    manifest = _manifest_of(src, allow_dir_mismatch=plugin_id is not None)
     pid = plugin_id or str(manifest["id"])
     if pid != src.name and plugin_id is None:
         raise PluginError(tr("plugins.err.dir_id_mismatch", dir=src.name, id=pid),
