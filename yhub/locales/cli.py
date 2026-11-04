@@ -7,7 +7,8 @@ Generated shell code (completion scripts), logs and comments are intentionally n
 EN = {
     # ---------------------------------------------------------------- config
     # ---------------------------------------------------------------- plugin management
-    "cli.plugin.registry_cleared": "Cleared the plugin registry source",
+    "cli.plugin.registry_official": "the official plugin index",
+    "cli.plugin.registry_off": "the plugin marketplace is off (yhub plugin registry on)",
     "cli.plugin.no_matches": "No matching entry in the plugin registry",
     "cli.plugin.mark.installed": "installed",
     "cli.plugin.mark.available": "available",
@@ -187,7 +188,8 @@ EN = {
 ZH = {
     # ---------------------------------------------------------------- config
     # ---------------------------------------------------------------- plugin management
-    "cli.plugin.registry_cleared": "已清空插件源",
+    "cli.plugin.registry_official": "官方插件源",
+    "cli.plugin.registry_off": "插件市场已关闭（yhub plugin registry on）",
     "cli.plugin.no_matches": "插件源里没有匹配项",
     "cli.plugin.mark.installed": "已装",
     "cli.plugin.mark.available": "可装",

@@ -156,12 +156,18 @@ def _read_json_url(url: str) -> dict:
 
 
 def registry_url() -> str:
-    """The marketplace index URL. `read_settings` already merges the default in, so an empty answer
-    means the user turned it off on purpose — only a *broken* settings read falls back to the default."""
-    try:
-        from .settings import read_settings
+    """The marketplace index URL, or "" when the marketplace switch is off.
 
-        return str(read_settings()[0].get("plugins_registry_url") or "").strip()
+    Two independent things: the URL (`read_settings` fills the official index in when it is empty) and
+    `plugins_marketplace`. A broken settings read falls back to the official index rather than to
+    "off" — failing closed would silently hide every installable plugin."""
+    try:
+        from .settings import DEFAULT_REGISTRY_URL, read_settings
+
+        settings = read_settings()[0]
+        if settings.get("plugins_marketplace") is False:
+            return ""
+        return str(settings.get("plugins_registry_url") or DEFAULT_REGISTRY_URL).strip()
     except Exception:  # noqa: BLE001
         try:
             from .settings import DEFAULT_REGISTRY_URL as fallback

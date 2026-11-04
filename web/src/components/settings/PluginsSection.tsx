@@ -154,11 +154,13 @@ export default function PluginsSection({ settings: currentSettings, schema, setK
   const [marketBusy, setMarketBusy] = useState('')
 
   const registryUrl = currentSettings?.plugins_registry_url || ''
-  // The official index is a backend default, so "empty" now means "turned off" — offer a way back
-  // that does not require knowing the URL by heart.
+  /** Master switch (`plugins_marketplace`): off means nothing is fetched and install-by-id stops resolving */
+  const marketplaceOn = currentSettings?.plugins_marketplace !== false
+  // The official index is a backend default; keep it around so "reset" needs no memorised URL.
   const defaultRegistry = String(
     (schema?.defaults as Record<string, unknown> | undefined)?.plugins_registry_url ?? '',
   )
+  const customRegistry = !!defaultRegistry && !!registryUrl && registryUrl !== defaultRegistry
 
   const load = useCallback(async () => {
     try {
@@ -192,10 +194,10 @@ export default function PluginsSection({ settings: currentSettings, schema, setK
   }, [load])
 
   useEffect(() => {
-    if (registryUrl) void loadCatalog('', false)
-    // Auto-fetch once when the plugin source URL changes; search/refresh are explicit button clicks
+    if (marketplaceOn && registryUrl) void loadCatalog('', false)
+    // Auto-fetch once when the source or the switch changes; search/refresh are explicit button clicks
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registryUrl])
+  }, [registryUrl, marketplaceOn])
 
   /** Enable/disable: uses the settings shell's write channel (writes `plugins.<id>._enabled`), same semantics as the CLI */
   const toggle = useCallback(
@@ -415,11 +417,29 @@ export default function PluginsSection({ settings: currentSettings, schema, setK
     }
   }, [loadCatalog, notify, registryDraft, setKey, t])
 
+  /** Flip the marketplace switch (`plugins_marketplace`) */
+  const setMarketplace = useCallback(
+    async (on: boolean) => {
+      setMarketBusy('switch')
+      try {
+        const r = await setKey('plugins_marketplace', on)
+        if (!r.ok) {
+          notify(t('settings.plugins.notify.saveFailed', { error: r.error }), 'error')
+          return
+        }
+        if (on) await loadCatalog('', true)
+      } finally {
+        setMarketBusy('')
+      }
+    },
+    [loadCatalog, notify, setKey, t],
+  )
+
+  /** Put the official index back (a stored URL wins over the default, so this writes "") */
   const restoreRegistry = useCallback(async () => {
-    if (!defaultRegistry) return
     setMarketBusy('registry')
     try {
-      const r = await setKey('plugins_registry_url', defaultRegistry)
+      const r = await setKey('plugins_registry_url', '')
       if (!r.ok) {
         notify(t('settings.plugins.notify.saveFailed', { error: r.error }), 'error')
         return
@@ -430,7 +450,7 @@ export default function PluginsSection({ settings: currentSettings, schema, setK
     } finally {
       setMarketBusy('')
     }
-  }, [defaultRegistry, loadCatalog, notify, setKey, t])
+  }, [loadCatalog, notify, setKey, t])
 
   const core = (entries ?? []).filter((e) => e.kind === 'core')
   const third = (entries ?? []).filter((e) => e.kind !== 'core')
@@ -532,11 +552,19 @@ export default function PluginsSection({ settings: currentSettings, schema, setK
               {t('settings.plugins.market.search')}
             </button>
           </div>
-          {/* "Off" is a state of its own, not an error from the catalog: show it with the way back,
-              whatever the last catalog call returned (a cleared source makes that call fail). */}
-          {!registryUrl && defaultRegistry ? (
-            <div className="flex flex-wrap items-center gap-2 ui-meta">
-              {t('settings.plugins.market.noRegistry')}
+          <div className="flex flex-wrap items-center gap-2 ui-meta">
+            <button
+              type="button"
+              className={BTN}
+              disabled={marketBusy === 'switch'}
+              onClick={() => void setMarketplace(!marketplaceOn)}
+              aria-pressed={marketplaceOn}
+            >
+              {marketplaceOn
+                ? t('settings.plugins.market.switchOff')
+                : t('settings.plugins.market.switchOn')}
+            </button>
+            {customRegistry ? (
               <button
                 type="button"
                 className={BTN}
@@ -545,9 +573,10 @@ export default function PluginsSection({ settings: currentSettings, schema, setK
               >
                 {t('settings.plugins.market.useDefault')}
               </button>
-            </div>
-          ) : null}
-          {catalogError ? (
+            ) : null}
+            <span>{marketplaceOn ? '' : t('settings.plugins.market.noRegistry')}</span>
+          </div>
+          {!marketplaceOn ? null : catalogError ? (
             <div className="text-[12px] text-red-300">
               {catalogError}
               <span className="ui-meta ml-2">{t('settings.plugins.market.noRegistryHint')}</span>

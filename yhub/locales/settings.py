@@ -36,6 +36,7 @@ EN = {
     ),
     "settings.capsules_subdomains_not_bool": "capsules_subdomains is not a boolean; using the default",
     "settings.registry_url_not_string": "plugins_registry_url is not a string; using the default",
+    "settings.marketplace_not_bool": "plugins_marketplace is not true/false; using the default",
     "settings.overrides_invalid_entries": "capsules_subdomains_overrides has invalid entries; ignored",
     "settings.overrides_not_object": "capsules_subdomains_overrides is not an object; using the default",
     "settings.plugin_section_not_object_warning": (
@@ -85,6 +86,7 @@ EN = {
     # apply_value / declared fields / overrides / plugin sections
     "settings.capsules_subdomains_must_be_bool": "capsules_subdomains must be a boolean",
     "settings.registry_url_must_be_string": "plugins_registry_url must be a string",
+    "settings.marketplace_must_be_bool": "plugins_marketplace must be true or false",
     "settings.registry_url_must_be_string_hint": (
         "http(s) URL, file:// or a local path; empty = not configured"
     ),
@@ -157,6 +159,7 @@ ZH = {
     "settings.capsules_disabled_not_string_list": "capsules_disabled 不是字符串列表，已用默认值",
     "settings.capsules_subdomains_not_bool": "capsules_subdomains 不是布尔值，已用默认值",
     "settings.registry_url_not_string": "plugins_registry_url 不是字符串，已用默认值",
+    "settings.marketplace_not_bool": "plugins_marketplace 不是 true/false，已用默认值",
     "settings.overrides_invalid_entries": "capsules_subdomains_overrides 有非法项，已忽略",
     "settings.overrides_not_object": "capsules_subdomains_overrides 不是对象，已用默认值",
     "settings.plugin_section_not_object_warning": (
@@ -186,6 +189,7 @@ ZH = {
     "settings.hotkey_conflict_hint": "同一个组合键只能绑一个动作；先给那个动作换一个，或把它的清空",
     "settings.capsules_subdomains_must_be_bool": "capsules_subdomains 要是布尔值",
     "settings.registry_url_must_be_string": "plugins_registry_url 要是字符串",
+    "settings.marketplace_must_be_bool": "plugins_marketplace 要是 true 或 false",
     "settings.registry_url_must_be_string_hint": (
         "http(s) URL、file:// 或本地路径；留空 = 未配置"
     ),

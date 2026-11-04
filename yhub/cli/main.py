@@ -92,7 +92,9 @@ def _build_parser() -> argparse.ArgumentParser:
     registry_sub.add_parser("get", help="Print the current registry URL")
     registry_set = registry_sub.add_parser("set", help="Set the registry URL (JSON registry file)")
     registry_set.add_argument("url")
-    registry_sub.add_parser("clear", help="Clear the registry URL")
+    registry_sub.add_parser("clear", help="Go back to the official registry")
+    registry_sub.add_parser("on", help="Turn the plugin marketplace on")
+    registry_sub.add_parser("off", help="Turn the plugin marketplace off (nothing is fetched)")
 
     # ---- declared commands (adapter faces.cli) -------------------------------------------
     faces = generate.discover_cli_faces()
@@ -452,13 +454,19 @@ def _run_plugin(args, parser) -> int:
         if sub == "registry":
             action = getattr(args, "registry_command", None) or "get"
             if action == "get":
-                print(pm.registry_url())
+                print(pm.registry_url() or tr("cli.plugin.registry_off"))
                 return 0
             from yhub.server.adapters.settings import set_values
 
+            if action in ("off", "on"):
+                set_values({"plugins_marketplace": action == "on"})
+                print(pm.registry_url() or tr("cli.plugin.registry_off"))
+                return 0
+            # `set` / `clear` both mean "the marketplace should work": turning it back on here avoids
+            # the trap of setting a URL on a machine where the switch is off and seeing nothing happen.
             url = "" if action == "clear" else args.url.strip()
-            set_values({"plugins_registry_url": url})
-            print(url or tr("cli.plugin.registry_cleared"))
+            set_values({"plugins_registry_url": url, "plugins_marketplace": True})
+            print(url or tr("cli.plugin.registry_official"))
             return 0
         if sub == "search":
             rows = pm.catalog(getattr(args, "query", ""))

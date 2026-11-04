@@ -47,6 +47,8 @@ export type Settings = {
   capsules_subdomains_overrides?: Record<string, boolean>
   /** plugin marketplace registry URL (backend-owned; the shell does not read it) */
   plugins_registry_url?: string
+  /** Master switch for the plugin marketplace: false = nothing is fetched, no install by id */
+  plugins_marketplace?: boolean
   /** plugin config section (open namespace) */
   plugins?: Record<string, Record<string, unknown>>
 }

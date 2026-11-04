@@ -252,8 +252,10 @@ export const en = {
   'settings.plugins.market.noRegistryHint':
     'Configure a plugin source first (or on the command line: yhub plugin registry set …)',
   'settings.plugins.market.loading': 'Reading the plugin marketplace…',
-  'settings.plugins.market.noRegistry': 'The plugin marketplace is off: the source is empty.',
+  'settings.plugins.market.noRegistry': 'The marketplace is off: nothing is fetched, and installing by id is unavailable.',
   'settings.plugins.market.useDefault': 'Use the official source',
+  'settings.plugins.market.switchOff': 'Turn the marketplace off',
+  'settings.plugins.market.switchOn': 'Turn the marketplace on',
   'settings.plugins.market.empty': 'No matching plugins.',
   'settings.plugins.market.installed': 'Installed{suffix}',
   'settings.plugins.market.updateAvailable': 'Update available',
@@ -519,8 +521,10 @@ export const zhCN = {
   'settings.plugins.market.noRegistryHint':
     '先配置插件源（或命令行：yhub plugin registry set …）',
   'settings.plugins.market.loading': '读取插件市场…',
-  'settings.plugins.market.noRegistry': '插件市场已关闭：插件源是空的。',
+  'settings.plugins.market.noRegistry': '插件市场已关闭：不访问网络，按 id 安装也不可用。',
   'settings.plugins.market.useDefault': '恢复官方插件源',
+  'settings.plugins.market.switchOff': '关闭插件市场',
+  'settings.plugins.market.switchOn': '开启插件市场',
   'settings.plugins.market.empty': '没有匹配的插件。',
   'settings.plugins.market.installed': '已装{suffix}',
   'settings.plugins.market.updateAvailable': '有更新',

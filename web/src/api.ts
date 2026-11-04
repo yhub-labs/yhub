@@ -721,6 +721,8 @@ export type SettingsData = {
   capsules_subdomains_overrides?: Record<string, boolean>
   /** plugin marketplace registry URL */
   plugins_registry_url?: string
+  /** Master switch for the plugin marketplace: false = nothing is fetched, no install by id */
+  plugins_marketplace?: boolean
   /**
    * Plugin config section (the open namespace from phase E): key = plugin id, value = that plugin's
    * own config object.

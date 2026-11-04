@@ -77,7 +77,7 @@ declaration's `ready`/`status` resolve per request.
 File `~/.config/yhub/settings.json` (`YHUB_CONFIG_DIR` / `YHUB_SETTINGS_FILE` override for tests). Keys:
 `version`, `hotkeys.{toggle_panel,show_panel,hide_panel}`,
 `tray.{close_behavior,left_click,double_click,show_on_start,show_notifications}`, `capsules_dir`,
-`capsules_disabled`, `capsules_subdomains`, `capsules_subdomains_overrides`, `plugins_registry_url`,
+`capsules_disabled`, `capsules_subdomains`, `capsules_subdomains_overrides`, `plugins_registry_url`, `plugins_marketplace`,
 `ui_language`, `plugins` — the dotted paths `tauri/src/config.rs` uses.
 
 | Method | Path | Input | Response |

@@ -163,7 +163,7 @@ Registry (marketplace index) is a static JSON at `plugins_registry_url` — `{"s
 
 The default is the official index, `https://raw.githubusercontent.com/yhub-labs/yhub-plugins/main/registry.json` (`DEFAULT_REGISTRY_URL` in `settings.py`), so `yhub plugin search` and `yhub plugin install <id>` work with no configuration at all. Three things follow from that:
 
-* An **empty** `plugins_registry_url` is a deliberate "no marketplace": the host stops fetching and installs by id stop resolving. Anything else replaces the default outright.
+* `plugins_marketplace` (default `true`) is the switch: set it to `false` and the host stops fetching — installs by id stop resolving. It is a separate key because an empty URL cannot mean "off": every settings file written before 0.1.6 has `""` stored there, and that has to keep meaning "the official index". `yhub plugin registry off` / `on` flips it.
 * Entries pin a **`ref`** (a tag) where the repository has one, so installing by id fetches exactly the version the index names instead of whatever the default branch is today.
 * The index is a *moving document* behind a 5-minute CDN cache, so an edit is not visible instantly — and drift in it decides what everyone installs. That is why `yhub-plugins` runs `scripts/verify-registry.py` (`--network` included) on every push and once a day: an entry must match the plugin's own `plugin.json` (`version`, `min_yhub`, `id`), and this repository's plugin bumps ship their index edit in the same commit.
 

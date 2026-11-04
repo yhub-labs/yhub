@@ -46,7 +46,8 @@ Section names (`hotkeys`, `tray`, `plugins`) read and write as a whole; action i
 | `capsules_subdomains` | bool | `false` | boolean; effective per capsule = `overrides[scope] ?? this` |
 | `capsules_subdomains_overrides` | object | `{}` | non-empty string keys, boolean values; written whole |
 | `ui_language` | string | `en` | `en` / `zh-CN`; drives UI and error language |
-| `plugins_registry_url` | string | `https://raw.githubusercontent.com/yhub-labs/yhub-plugins/main/registry.json` | string; backend-only (marketplace index). The default is the official index; store a different URL to use your own, or an empty string to turn the marketplace off (nothing is fetched, no install by id) |
+| `plugins_registry_url` | string | `https://raw.githubusercontent.com/yhub-labs/yhub-plugins/main/registry.json` | string; backend-only (marketplace index). Empty = the official index (settings files written before 0.1.6 carry `""` there, so empty must keep meaning "default"); store a URL to use your own index |
+| `plugins_marketplace` | bool | `true` | backend-only; `false` = the marketplace is off: nothing is fetched and installing by id stops resolving. The switch, not an empty URL — the old default was persisted as `""` in every existing config |
 | `plugins` | object | `{}` | open map: the section and each `plugins.<id>` must be objects |
 
 `capsules_dir` is the library directory scanned by `capsules.py`; `~/Y-Hub/capsules` is created by `POST /api/capsules/ensure` ([`capsules.md`](capsules.md)).

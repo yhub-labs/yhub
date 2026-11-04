@@ -96,9 +96,12 @@ TOP_DEFAULTS: dict[str, Any] = {
     "capsules_subdomains_overrides": {},
     # UI / error language: en | zh-CN.
     "ui_language": "en",
-    # Plugin marketplace index (registry JSON URL / file:// / local path). Defaults to the official
-    # index; a stored value replaces it, and a stored empty string turns the marketplace off.
+    # Plugin marketplace index (registry JSON URL / file:// / local path). Empty = the official index
+    # (`DEFAULT_REGISTRY_URL`); a stored value replaces it. "Off" is its own switch, not an empty URL,
+    # because every settings file written before 0.1.6 already carries an empty string.
     "plugins_registry_url": DEFAULT_REGISTRY_URL,
+    # Master switch for the marketplace: false = nothing is fetched and install-by-id stops resolving.
+    "plugins_marketplace": True,
 }
 
 # Combos: modifier alias → canonical name. Super/Meta/Command all mean ⌘, Alt means ⌥ (same as Tauri's parser)
@@ -201,6 +204,7 @@ def known_keys() -> list[str]:
     keys.append("capsules_subdomains")
     keys.append("capsules_subdomains_overrides")
     keys.append("plugins_registry_url")
+    keys.append("plugins_marketplace")
     keys.append("ui_language")
     # Open section: only the section name goes in. Plugin-internal keys (plugins.<id>.<key>) are **not**
     # in the catalog — they are declared by the manifest's config section and validated against it
@@ -220,6 +224,7 @@ def defaults() -> dict[str, Any]:
         "capsules_subdomains": False,
         "capsules_subdomains_overrides": {},
         "plugins_registry_url": DEFAULT_REGISTRY_URL,
+        "plugins_marketplace": True,
         "ui_language": "en",
         # plugins is an open map: empty by default (key = plugin id, value = that plugin's own config object)
         "plugins": {},
@@ -292,7 +297,7 @@ def read_value(settings: dict[str, Any], key: str) -> Any:
     if key == "capsules_subdomains_overrides":
         return dict(settings.get("capsules_subdomains_overrides", {}))
     if key == "plugins_registry_url":
-        return str(settings.get("plugins_registry_url") or "")
+        return str(settings.get("plugins_registry_url") or DEFAULT_REGISTRY_URL)
     if key == "ui_language":
         return str(settings.get("ui_language") or "en")
     for prefix in ("hotkeys", "tray"):
@@ -460,9 +465,18 @@ def _read_settings() -> tuple[dict[str, Any], list[str]]:
 
     registry_url = raw.get("plugins_registry_url")
     if isinstance(registry_url, str):
-        out["plugins_registry_url"] = registry_url.strip()
+        # Every settings file written before 0.1.6 carries "" here (the old default was persisted), so
+        # an empty value has to mean "official index" rather than "off" — the switch below is the only
+        # way to turn the marketplace off.
+        out["plugins_registry_url"] = registry_url.strip() or DEFAULT_REGISTRY_URL
     elif registry_url is not None:
         warnings.append(tr("settings.registry_url_not_string"))
+
+    marketplace = raw.get("plugins_marketplace")
+    if isinstance(marketplace, bool):
+        out["plugins_marketplace"] = marketplace
+    elif marketplace is not None:
+        warnings.append(tr("settings.marketplace_not_bool"))
 
     overrides = raw.get("capsules_subdomains_overrides")
     if isinstance(overrides, dict):
@@ -622,7 +636,15 @@ def apply_value(settings: dict[str, Any], key: str, value: Any) -> dict[str, Any
                 tr("settings.registry_url_must_be_string"),
                 hint=tr("settings.registry_url_must_be_string_hint"),
             )
-        settings["plugins_registry_url"] = value.strip()
+        # "" = back to the official index (`yhub plugin registry clear`). Store the resolved URL rather
+        # than the empty string so the value handed back to the UI is the one a fresh read would give —
+        # the legacy "" form is still honoured on read, for settings files written before 0.1.6.
+        settings["plugins_registry_url"] = value.strip() or DEFAULT_REGISTRY_URL
+        return settings
+    if key == "plugins_marketplace":
+        if not isinstance(value, bool):
+            raise ToolError(tr("settings.marketplace_must_be_bool"), hint="true / false")
+        settings["plugins_marketplace"] = value
         return settings
     if key == "ui_language":
         if value not in ("en", "zh-CN"):
@@ -875,6 +897,7 @@ def write_settings(settings: dict[str, Any], raw: dict[str, Any] | None = None) 
     merged["capsules_subdomains"] = bool(settings.get("capsules_subdomains", False))
     merged["capsules_subdomains_overrides"] = dict(settings.get("capsules_subdomains_overrides", {}))
     merged["plugins_registry_url"] = str(settings.get("plugins_registry_url") or "")
+    merged["plugins_marketplace"] = bool(settings.get("plugins_marketplace", True))
     merged["ui_language"] = str(settings.get("ui_language") or "en")
     merged["plugins"] = dict(settings["plugins"])
 
@@ -909,6 +932,7 @@ def set_values(pairs: dict[str, Any]) -> tuple[dict[str, Any], Path]:
         "capsules_subdomains": bool(current.get("capsules_subdomains", False)),
         "capsules_subdomains_overrides": dict(current.get("capsules_subdomains_overrides", {})),
         "plugins_registry_url": str(current.get("plugins_registry_url") or ""),
+        "plugins_marketplace": bool(current.get("plugins_marketplace", True)),
         "ui_language": str(current.get("ui_language") or "en"),
         "plugins": dict(current["plugins"]),
     }
