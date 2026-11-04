@@ -1,0 +1,26 @@
+[package]
+name = "yhub"
+version = "0.1.0"
+edition = "2021"
+description = "Y-Hub native shell — global hotkey, tray and a lightweight window"
+repository = "https://github.com/yhub-labs/yhub"
+homepage = "https://github.com/yhub-labs/yhub"
+license = "MIT"
+
+[dependencies]
+# image-png：菜单栏托盘图标要从 PNG 解出 RGBA（tauri::image::Image::from_bytes），
+# 该能力由 image-png feature 提供（tray-icon 本身不带）。
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri-plugin-global-shortcut = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+plist = "1"
+dirs = "6"
+base64 = "0.22"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", features = ["NSWindow", "NSApplication", "NSRunningApplication"] }

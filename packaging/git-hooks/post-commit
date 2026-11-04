@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#
+# 提交后的自动动作（`make install-hooks` 把它装成 `.git/hooks/post-commit`）。
+#
+# **自动装机**：改的是核心（yhub/web/tauri）时重建并把 Y-Hub.app 换掉（分钟级）。
+# 取舍：它会在你提交后退出并重新拉起正在用的 App（几秒），换来「我在用的版本永远是刚才那棵树」。
+#
+# 非核心插件已拆到独立仓库，不在核心提交钩子里同步。
+#
+# 跳过条件：
+#   * 不在 main 分支
+#   * YHUB_AUTOINSTALL=0 关自动装机（写进 shell rc 就是长期关）
+set -uo pipefail
+
+[ "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" = "main" ] || exit 0
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+cd "$REPO_ROOT" || exit 0
+
+mkdir -p build
+
+# ---- 自动装机：后台跑（分钟级） ---------------------------------------------
+[ "${YHUB_AUTOINSTALL:-1}" = "0" ] && exit 0
+
+# 已经有安装/验证在跑：这次不排队（下一次提交还会触发），避免堆积一串构建。
+if [ -n "$(pgrep -f 'install-app.sh|verify-packed-app.sh' 2>/dev/null | head -1)" ]; then
+  echo "[autoinstall] 已有安装/验证在跑，跳过这次自动装机（要手动装：make install）"
+  exit 0
+fi
+
+echo "[autoinstall] 后台装机中（日志 build/autoinstall.log）—— 想立刻看进度：tail -f build/autoinstall.log"
+# 包一层把退出码记进日志末尾：装机是后台跑的，失败时没人盯着日志，
+# 结果不留痕就等于没装（实测踩过：连续两次构建失败，/Applications 还是旧包，
+# 而提交输出里只有一行"后台装机中"，看起来一切正常）。
+# 所以每次都在日志尾部追加一行明确的 OK/FAILED 标记，grep 最后一条就能判断。
+(
+  ./packaging/install-app.sh >>build/autoinstall.log 2>&1
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    printf '\n[autoinstall] RESULT: OK（本次自动装机成功）\n' >>build/autoinstall.log
+  else
+    printf '\n[autoinstall] RESULT: FAILED（exit=%s，本次自动装机失败；/Applications 仍是旧包，手动重试：make install）\n' "$rc" >>build/autoinstall.log
+  fi
+) &
+exit 0

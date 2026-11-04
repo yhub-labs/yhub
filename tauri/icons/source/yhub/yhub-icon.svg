@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Y-Hub 图标 — 大尺寸（≥64px，24×24，自包含）
+  构图与单色件一致（三格按 Y 拓扑），把 Y 的主干那一格换成亮苔绿：
+  两臂同形、主干落地且更亮 —— 眼睛顺着「两条路汇成一条」读，正好是 Y 的形状。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" role="img" aria-labelledby="yhub-icon-title">
+  <title id="yhub-icon-title">Y-Hub</title>
+  <g>
+    <rect x="4.2" y="4" width="7.2" height="7.2" rx="2.2" fill="#4E7A5C"/>
+    <rect x="12.6" y="4" width="7.2" height="7.2" rx="2.2" fill="#4E7A5C"/>
+    <rect x="8.4" y="12.8" width="7.2" height="7.2" rx="2.2" fill="#9CC3A6"/>
+  </g>
+</svg>

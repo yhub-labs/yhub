@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Y-Hub 图标 — 单色件（24×24，自包含，currentColor）
+  构图：三格按 Y 拓扑摆放 —— 左上、右上两臂 + 下中主干，读作产品的 Y；
+  合起来是一条「Y 形的枢纽（Hub）」，与「三面同构、汇到一处」的产品定位一致。
+  几何全部由本文件定义，无第三方图形。
+  用法：≤32px / 菜单栏 / 标签页 / 单色印刷。默认色 #4E7A5C（苔绿）。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" color="#4E7A5C" role="img" aria-label="Y-Hub">
+  <g fill="currentColor">
+    <rect x="4.2" y="4" width="7.2" height="7.2" rx="2.2"/>
+    <rect x="12.6" y="4" width="7.2" height="7.2" rx="2.2"/>
+    <rect x="8.4" y="12.8" width="7.2" height="7.2" rx="2.2"/>
+  </g>
+</svg>

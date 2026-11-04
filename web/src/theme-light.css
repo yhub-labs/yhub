@@ -1,0 +1,211 @@
+/* 浅色主题：**只覆盖变量**（design.css / bento.css 的令牌），外加下面「桥接」一节里
+   对历史 Tailwind 工具类的映射。开关在信息墙墙头的「自定义」弹层与设置里。
+
+   约定：面板里新写的颜色一律用 design.css 的变量；确实要写 Tailwind 颜色工具类时，
+   必须在这里补一行桥接，否则浅色下会看不见 —— `verify-contrast.mjs` 就是抓这个漏网的。 */
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --ink-0: #f4f5f7; /* 窗口底 */
+  --ink-1: #fafafa; /* 内容区底 */
+  --ink-2: #ffffff; /* 卡片面 */
+  --ink-3: #f1f2f4; /* 卡内凹陷 */
+  --ink-4: #eceef1; /* 悬停 / 选中底 */
+
+  --ink-line: #e3e5e9;
+  --ink-line-strong: #cdd1d7;
+
+  --ink-text: #181a1f;
+  --ink-text-2: #52565e;
+  --ink-text-3: #595e66; /* 浅底上的弱文字：比 6b7078 再深一档，11px 也够 4.5:1 */
+
+  --ink-accent: #4e7a5c; /* 与图标同一个苔绿 */
+  --ink-accent-strong: #4e7a5c; /* 白底 + 白字 4.85:1 */
+  --ink-accent-solid: #41684e; /* 悬停再深一档（6.0:1） */
+  --ink-accent-quiet: #eef4ef; /* 选中行的极弱底 */
+  --ink-accent-text: #3d6b4f; /* 浅底当文字用：6.0:1 */
+
+  --ink-ok: #16a34a;
+  --ink-ok-text: #15803d;
+  --ink-ok-quiet: #eefaf2;
+  --ink-warn: #b45309;
+  --ink-warn-text: #92400e;
+  --ink-warn-quiet: #fff8e8;
+  --ink-danger: #dc2626;
+  --ink-danger-text: #b91c1c;
+  --ink-danger-quiet: #fdf1f1;
+
+  --shadow-1: 0 1px 2px rgb(16 24 40 / 6%);
+  --shadow-2: 0 8px 24px -12px rgb(16 24 40 / 18%), 0 1px 2px rgb(16 24 40 / 6%);
+
+  --ring: 0 0 0 2px #fff, 0 0 0 4px color-mix(in srgb, var(--ink-accent) 70%, transparent);
+
+  /* 便当格令牌（bento.css 的 :root）在浅色下的取值 */
+  --bento-bg: var(--ink-1);
+  --bento-surface: var(--ink-2);
+  --bento-head: transparent;
+  --bento-border: var(--ink-line);
+  --bento-border-strong: var(--ink-line-strong);
+  --bento-accent: var(--ink-accent);
+  --bento-text: var(--ink-text);
+  --bento-text-dim: var(--ink-text-2);
+  --bento-inset: var(--ink-3);
+  --bento-shadow: var(--shadow-1);
+  --bento-shadow-hover: var(--shadow-2);
+}
+
+/* 卡底渐隐在浅色里是「白 → 透明」，深色里是「卡面 → 透明」：两边都跟 --bento-surface 走 */
+:root[data-theme='light'] .bento-card::after {
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0), var(--bento-surface));
+}
+
+/* 滚动条与选区：浅底上用深色 */
+:root[data-theme='light'] ::-webkit-scrollbar-thumb {
+  background: rgb(0 0 0 / 0.18);
+}
+:root[data-theme='light'] ::-webkit-scrollbar-thumb:hover {
+  background: rgb(0 0 0 / 0.32);
+}
+
+/* 占位符：Chrome 在 color-scheme: light 下默认给半透明 GrayText（浅底上只有 ~2.6:1），
+   统一压深到 ~5:1；真输入文字是 near-black，占位符仍然浅一档、层级不乱。 */
+:root[data-theme='light'] ::placeholder {
+  color: rgb(0 0 0 / 0.6);
+}
+
+/* ── 桥接：历史 Tailwind 工具类（面板里还在用） ─────────────────
+   新代码请直接用 design.css 的变量与 .ui-* 类；下面这层只为老面板不掉色。 */
+
+/* 1) 文字：浅色一档（深色描写的 200/300/400 并成一档深灰） */
+:root[data-theme='light'] :is(.text-neutral-100, .text-neutral-200, .text-neutral-300) {
+  color: var(--ink-text);
+}
+:root[data-theme='light'] :is(.text-neutral-400, .text-neutral-500, .text-neutral-600) {
+  color: var(--ink-text-2);
+}
+:root[data-theme='light'] :is(
+  .text-emerald-200,
+  .text-emerald-300,
+  .text-emerald-400
+) {
+  color: #065f46;
+}
+:root[data-theme='light'] :is(
+  .text-amber-200,
+  .text-amber-200\/90,
+  .text-amber-300,
+  .text-amber-300\/70,
+  .text-amber-300\/90,
+  .text-amber-400,
+  .text-amber-400\/80
+) {
+  color: #92400e;
+}
+:root[data-theme='light'] :is(.text-red-200, .text-red-200\/70, .text-red-200\/90, .text-red-300) {
+  color: #b91c1c;
+}
+:root[data-theme='light'] :is(.text-blue-200, .text-blue-300, .text-sky-200, .text-sky-300) {
+  color: #1d4ed8;
+}
+:root[data-theme='light'] :is(.text-violet-200, .text-violet-300) {
+  color: #5b21b6;
+}
+/* 反白按钮上的字不是「正文色」：实心按钮（强调色/蓝底）保留白字 */
+:root[data-theme='light'] :is(.bg-blue-600, .bg-blue-500, .bg-\[\#1976D2\]):is(.text-white),
+:root[data-theme='light'] :is(.bg-\[\#1976D2\]):is(.text-white) {
+  color: #fff;
+}
+
+/* 2) 背景：白色叠层 → 同比例黑色叠层 */
+:root[data-theme='light'] .bg-white\/5 {
+  background-color: rgb(0 0 0 / 0.05);
+}
+:root[data-theme='light'] .bg-white\/10 {
+  background-color: rgb(0 0 0 / 0.1);
+}
+:root[data-theme='light'] .bg-white\/15 {
+  background-color: rgb(0 0 0 / 0.15);
+}
+:root[data-theme='light'] .bg-white\/\[0\.01\] {
+  background-color: rgb(0 0 0 / 0.01);
+}
+:root[data-theme='light'] .bg-white\/\[0\.02\] {
+  background-color: rgb(0 0 0 / 0.02);
+}
+:root[data-theme='light'] .bg-white\/\[0\.03\] {
+  background-color: rgb(0 0 0 / 0.03);
+}
+:root[data-theme='light'] .bg-white\/\[0\.04\] {
+  background-color: rgb(0 0 0 / 0.04);
+}
+:root[data-theme='light'] .bg-white\/\[0\.05\] {
+  background-color: rgb(0 0 0 / 0.05);
+}
+:root[data-theme='light'] .bg-white\/\[0\.06\] {
+  background-color: rgb(0 0 0 / 0.06);
+}
+:root[data-theme='light'] .bg-white\/\[0\.08\] {
+  background-color: rgb(0 0 0 / 0.08);
+}
+:root[data-theme='light'] .bg-white\/\[0\.09\] {
+  background-color: rgb(0 0 0 / 0.09);
+}
+:root[data-theme='light'] .bg-white\/\[0\.10\] {
+  background-color: rgb(0 0 0 / 0.1);
+}
+
+/* 深色小票（kbd 键帽、代码块、输入框的 bg-black/*）→ 浅灰内嵌底 */
+:root[data-theme='light'] .bg-black\/20 {
+  background-color: rgb(0 0 0 / 0.03);
+}
+:root[data-theme='light'] .bg-black\/30 {
+  background-color: rgb(0 0 0 / 0.04);
+}
+:root[data-theme='light'] .bg-black\/40 {
+  background-color: rgb(0 0 0 / 0.05);
+}
+:root[data-theme='light'] .bg-neutral-700\/50 {
+  background-color: rgb(0 0 0 / 0.06);
+}
+
+/* 3) 悬停态：必须自带规则，否则基线映射会把 hover 顶掉 */
+:root[data-theme='light'] .hover\:bg-white\/5:hover {
+  background-color: rgb(0 0 0 / 0.05);
+}
+:root[data-theme='light'] .hover\:bg-white\/10:hover {
+  background-color: rgb(0 0 0 / 0.1);
+}
+:root[data-theme='light'] .hover\:bg-white\/15:hover {
+  background-color: rgb(0 0 0 / 0.15);
+}
+:root[data-theme='light'] .hover\:bg-white\/\[0\.03\]:hover {
+  background-color: rgb(0 0 0 / 0.03);
+}
+:root[data-theme='light'] .hover\:bg-white\/\[0\.04\]:hover {
+  background-color: rgb(0 0 0 / 0.04);
+}
+:root[data-theme='light'] .hover\:bg-white\/\[0\.06\]:hover {
+  background-color: rgb(0 0 0 / 0.06);
+}
+
+/* 4) 描边 / 分隔线 / 焦点环 / 下划线 */
+:root[data-theme='light'] .border-white\/5 {
+  border-color: rgb(0 0 0 / 0.05);
+}
+:root[data-theme='light'] .border-white\/10 {
+  border-color: rgb(0 0 0 / 0.1);
+}
+:root[data-theme='light'] .border-white\/15 {
+  border-color: rgb(0 0 0 / 0.15);
+}
+:root[data-theme='light'] :is(.divide-white, .divide-white\/5, .divide-white\/\[0\.06\])
+  > :not(:last-child) {
+  border-color: rgb(0 0 0 / 0.08);
+}
+:root[data-theme='light'] .ring-white\/10 {
+  --tw-ring-color: rgb(0 0 0 / 0.12);
+}
+:root[data-theme='light'] .decoration-white\/20 {
+  text-decoration-color: rgb(0 0 0 / 0.25);
+}

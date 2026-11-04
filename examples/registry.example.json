@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "plugins": [
+    {
+      "id": "example",
+      "name": "Example Plugin",
+      "author": "you",
+      "description": "Replace this entry with your plugin. `repo` points at a GitHub repository, and `version` must match plugin.json in that repo.",
+      "repo": "owner/yhub-plugin-example",
+      "version": "1.0.0",
+      "min_yhub": "0.1.0",
+      "category": "tools"
+    }
+  ]
+}

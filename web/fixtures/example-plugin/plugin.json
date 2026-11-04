@@ -1,0 +1,83 @@
+{
+  "schema": 2,
+  "id": "example-plugin",
+  "name": "示例插件",
+  "icon": "plugin",
+  "description": "外置插件机制的验收样例：两格（常绿 + 必败）+ CLI 子命令 + MCP 工具 + 一个配置项",
+  "keywords": "示例 样例 验收 example li shi yan shou",
+  "trust": "full",
+  "enable": {
+    "default": true
+  },
+  "faces": {
+    "cli": {
+      "command": "exdemo",
+      "help": "示例外置插件的 CLI 面（装入才出现，禁用即消失）",
+      "subcommands": [
+        {
+          "name": "hello",
+          "help": "回一句固定的人话（成功信封）",
+          "params": [],
+          "handler": "cli_hello"
+        }
+      ]
+    },
+    "mcp": [
+      {
+        "name": "example_hello",
+        "description": "示例外置插件的 MCP 工具：回一个固定的成功信封",
+        "params": [],
+        "handler": "mcp_hello"
+      }
+    ]
+  },
+  "presentation": {
+    "launcher": true,
+    "tiles": [
+      {
+        "id": "example.ok",
+        "zone": "todo",
+        "order": 90,
+        "title": "示例常绿",
+        "href": "http://127.0.0.1:1/",
+        "stale_after": 300,
+        "critical": false,
+        "enabled": true,
+        "span": "sm",
+        "page": 1,
+        "source": "example",
+        "group": "example-ok",
+        "refresh": 60,
+        "params": {},
+        "fetch": "fetch_ok"
+      },
+      {
+        "id": "example.down",
+        "zone": "todo",
+        "order": 91,
+        "title": "示例必败",
+        "href": "http://127.0.0.1:1/",
+        "stale_after": 300,
+        "critical": false,
+        "enabled": true,
+        "span": "sm",
+        "page": 1,
+        "source": "example-down",
+        "group": "example-down",
+        "refresh": 60,
+        "params": {},
+        "fetch": "fetch_down"
+      }
+    ]
+  },
+  "config": [
+    {
+      "key": "greeting",
+      "type": "str",
+      "default": "你好",
+      "help": "示例配置项：值住 plugins.example-plugin.greeting"
+    }
+  ],
+  "version": "0.1.0",
+  "min_yhub": "0.1.0"
+}

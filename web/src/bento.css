@@ -1,0 +1,953 @@
+/* 便当格（bento grid）基础布局：设计令牌 + 网格 + 卡片壳。
+   这里只管「怎么排、什么质感」；每张卡里面长什么样仍归各组件自己负责。
+   断点：≥1024px 桌面 12 列，640~1023px 平板 6 列，<640px 手机 3 列。
+   刻度与 wallLayout.ts 的 BASE_COLS/TABLET_COLS/PHONE_COLS 必须同一个口径。 */
+
+:root {
+  /* 调色板：全部是指向 design.css 令牌的别名 —— 便当格不再自己定义颜色，
+     深浅主题只需要覆盖 design.css 那一份。 */
+  --bento-bg: var(--ink-1); /* 内容区底：比卡片深一档的中性灰 */
+  --bento-surface: var(--ink-2); /* 卡片面 */
+  --bento-head: transparent; /* 卡片头：不做底色分层，靠一条描边分开 */
+  --bento-border: var(--ink-line);
+  --bento-border-strong: var(--ink-line-strong);
+  --bento-accent: var(--ink-accent);
+  --bento-text: var(--ink-text);
+  --bento-text-dim: var(--ink-text-2);
+
+  /* 几何：圆角 8px（卡片）、6px（卡内控件）。低于 12px 的圆角读起来「像软件」，
+     12px 以上配上大阴影就是 SaaS 落地页的观感 —— 这里刻意收小。 */
+  --bento-radius: var(--radius-lg);
+  --bento-gap: 12px;
+  /* 一行网格的基准像素高：与 wallLayout.ts 的 ROW_PX 同值。
+     旧版这里是 min/max 的 minmax(240, 460) 并交给视口倒推 —— 行高会随显示器晃，
+     P1 起改成固定值（页容量（rowPerPage）才是跟视口走的那一个）。 */
+  --bento-row-h: 80px;
+  /* 卡内「凹陷」面：输入框、meta 格、空态块的底色，比卡面深一档 */
+  --bento-inset: var(--ink-3);
+  /* 卡片正文留白 = 面板默认的内边距（面板里用 `-mx-5 -my-4` 抵消就是全出血）。
+     改这两个值等于改所有卡片与面板的边距，别只按一屏调。 */
+  --bento-pad-x: 20px;
+  --bento-pad-y: 16px;
+
+  /* 层次：阴影只用来分层，不做「悬停发光」 */
+  --bento-shadow: var(--shadow-1);
+  --bento-shadow-hover: var(--shadow-2);
+}
+
+/* 工作台内容区（含侧栏右侧整块）铺中性底，卡片才浮得起来 */
+.bento-main {
+  background: var(--bento-bg);
+}
+
+/* —— 信息墙独立页（/?view=wall）——
+   副屏全屏看的那一页：整页只有一面墙（墙内的格子铺成便当网格），不挂侧栏、不挂其它小工具。
+   底色与文字都走同一套令牌，所以深浅主题不用额外规则（令牌由 theme-light.css 整体覆盖）。 */
+.wall-page {
+  height: 100%;
+  overflow: auto;
+  background: var(--bento-bg);
+  color: var(--bento-text);
+}
+
+.wall-page__inner {
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 22px 20px 40px;
+}
+
+@media (min-width: 768px) {
+  .wall-page__inner {
+    padding: 30px 32px 56px;
+  }
+}
+
+/* —— 网格：12 / 6 / 3 列 ——
+   这里只剩「加载骨架」还在用（真墙由 react-grid-layout 绝对定位接管），
+   但刻度与 wallLayout.ts 的 BASE_COLS/TABLET_COLS/PHONE_COLS 必须同一个口径。 */
+.bento-grid {
+  display: grid;
+  gap: var(--bento-gap);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  /* 行高固定 80px：与 wallLayout.ts 的 ROW_PX 同值（旧版 minmax(240,460) 会把骨架撑成一整屏） */
+  grid-auto-rows: var(--bento-row-h);
+  /* dense：让小卡回填大卡留下的空洞，网格才拼得满 */
+  grid-auto-flow: row dense;
+  align-content: start;
+}
+
+@media (max-width: 1023.98px) {
+  .bento-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 639.98px) {
+  .bento-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* —— 卡片 —— */
+.bento-card {
+  display: flex;
+  flex-direction: column;
+  position: relative; /* 底部渐隐 ::after 的定位锚 */
+  min-width: 0;
+  overflow: hidden; /* 全出血 iframe 贴边时裁掉直角，别戳出圆角 */
+  background: var(--bento-surface);
+  border: 1px solid var(--bento-border);
+  border-radius: var(--bento-radius);
+  box-shadow: var(--bento-shadow);
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.bento-card:hover {
+  border-color: var(--bento-border-strong);
+}
+
+.bento-card:focus-within {
+  border-color: color-mix(in srgb, var(--bento-accent) 60%, transparent);
+}
+
+.bento-card.is-active {
+  border-color: color-mix(in srgb, var(--bento-accent) 55%, transparent);
+}
+
+/* 正文还有下文时，在卡底压一条渐隐：macOS 的悬浮滚动条平时看不见，
+   「内容被卡边切掉」很容易读成「坏了」。装得下、或已滚到底就不显示。 */
+.bento-card::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  height: 32px;
+  border-radius: 0 0 calc(var(--bento-radius) - 1px) calc(var(--bento-radius) - 1px);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0), var(--bento-surface));
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  pointer-events: none; /* 只当提示，不挡正文里的按钮和输入框 */
+  z-index: 1;
+}
+
+.bento-card.has-more::after {
+  opacity: 1;
+}
+
+/* 占位：sm=1×1（图标档）、md=6×2（半行）、lg=6×4（半行双高）、full=12×2（通栏）
+   真墙的定位由 RGL 接管，这里的类只给骨架与 `data-bento-span` 语义兜底。 */
+.bento-card--sm {
+  grid-column: span 1;
+  grid-row: span 1;
+}
+
+.bento-card--md {
+  grid-column: span 6;
+  grid-row: span 2;
+}
+
+.bento-card--lg {
+  grid-column: span 6;
+  grid-row: span 4;
+}
+
+/* 手机只有 3 列，跨列没有意义 —— 只保留行跨度（大卡依然是「高一倍」） */
+@media (max-width: 639.98px) {
+  .bento-card--md,
+  .bento-card--lg {
+    grid-column: span 3;
+  }
+}
+
+/* 通栏卡（信息墙这类总览视图）：占满整行、两行高（内容再多卡内滚） */
+.bento-card--full {
+  grid-column: 1 / -1;
+  grid-row: span 2;
+}
+
+/* 1×1 小卡只留图标 + 标题 + 状态点：副标题在窄卡里只能省略号截断，白占一行 */
+.bento-card--sm .bento-card__subtitle {
+  display: none;
+}
+
+/* —— 卡头状态点：与侧栏的状态点同一份数据（ready / status）—— */
+.bento-card__status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--bento-text-dim);
+}
+
+.bento-card__status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: currentColor;
+}
+
+.bento-card__status.is-ok {
+  color: var(--ink-ok-text);
+}
+.bento-card__status.is-warn {
+  color: var(--ink-warn-text);
+}
+.bento-card__status.is-error {
+  color: var(--ink-danger-text);
+}
+.bento-card__status.is-idle {
+  color: var(--ink-text-3);
+}
+
+/* 窄卡（1×1）里状态文案同样只留点，短语进 title/aria-label */
+.bento-card--sm .bento-card__status-label {
+  display: none;
+}
+
+/* 键盘可达：卡内的可聚焦元素一律给 2px 强调色环（与输入框 focus 同色） */
+.bento-card :focus-visible {
+  outline: 2px solid var(--bento-accent);
+  outline-offset: 2px;
+}
+
+/* —— 卡片头 —— */
+.bento-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--bento-border);
+  background: var(--bento-head);
+}
+
+.bento-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 1;
+  flex: none;
+  color: var(--ink-text-2);
+}
+
+.bento-card__titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.bento-card__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+  color: var(--bento-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 标题可点 = 深链（信息墙格子）：链接跟标题同色，hover 才给下划线 */
+.bento-card__title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.bento-card__title a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.bento-card__subtitle {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--bento-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bento-card__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* —— 卡片正文：内部滚动，内容再高也不把网格撑破 ——
+   工具页 `.tool-page`（工作台默认形态：一次只放一个工具）共用同一套几何，所以下面两条
+   规则都带上它 —— 面板里用来抵消内边距的全出血负边距（`-mx-7 -my-6`）与卡内的
+   `@sm:`/`@md:` 断点在工具页里才是同一套数，不然换页布局就会跟卡里对不上。 */
+.bento-card__body,
+.tool-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--bento-pad-y) var(--bento-pad-x);
+  overflow-wrap: break-word;
+  /* 卡片自己成为一个容器查询上下文：卡内的 `@sm:`/`@md:` 断点按**卡宽**算，
+     不再按视口算 —— 否则 1440 桌面下 1×1 小卡里也会套用「桌面三列」布局。 */
+  container-type: inline-size;
+}
+
+/* 卡片比原来的整屏内容区窄，弹性子项必须允许收缩到内容以下 —— 否则一个长路径 / 一个
+   输入框的固有宽度就会把卡片顶出横向滚动条（LV 的挂载点路径、汉典的搜索行都栽在这）。
+   非弹性元素的 min-width 本来就是 0，这条只对 flex/grid 子项生效。 */
+.bento-card__body *,
+.bento-card__body,
+.tool-page *,
+.tool-page {
+  min-width: 0;
+}
+
+/* —— 卡内状态块：加载 / 空 / 成功 / 注意 / 错误 五档共用一套写法 ——
+   面板组件一律用 <CardState kind=…>（components/Card.tsx），别再各写各的圆角和配色。 */
+.bento-state {
+  border-radius: 12px;
+  border: 1px dashed var(--bento-border);
+  background: var(--bento-inset);
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--bento-text-dim);
+}
+
+.bento-state__text {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.bento-state--loading .bento-state__text {
+  align-items: center;
+}
+
+.bento-state__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 7px;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: bento-blink 1.2s ease-in-out infinite;
+}
+
+.bento-state--loading .bento-state__dot {
+  margin-top: 0;
+}
+
+.bento-state__hint {
+  margin-top: 4px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.bento-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.bento-state--ok {
+  border-style: solid;
+  border-color: rgb(52 211 153 / 0.35);
+  background: rgb(52 211 153 / 0.1);
+  color: #6ee7b7;
+}
+
+.bento-state--warn {
+  border-style: solid;
+  border-color: rgb(251 191 36 / 0.35);
+  background: rgb(251 191 36 / 0.1);
+  color: #fcd34d;
+}
+
+.bento-state--error {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--ink-danger) 32%, transparent);
+  background: var(--ink-danger-quiet);
+  color: var(--ink-danger-text);
+}
+
+@keyframes bento-blink {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* —— 加载占位 —— */
+.bento-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bento-skeleton__bar,
+.bento-skeleton__block {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05),
+    rgba(255, 255, 255, 0.12),
+    rgba(255, 255, 255, 0.05)
+  );
+  background-size: 200% 100%;
+  animation: bento-shimmer 1.4s ease-in-out infinite;
+}
+
+.bento-skeleton__bar {
+  height: 12px;
+  border-radius: 999px;
+}
+
+.bento-skeleton__bar--title {
+  width: 40%;
+  height: 10px;
+}
+
+.bento-skeleton__block {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 6px;
+}
+
+@keyframes bento-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bento-skeleton__bar,
+  .bento-skeleton__block,
+  .bento-state__dot {
+    animation: none;
+  }
+
+  .bento-card {
+    transition: none;
+  }
+}
+
+/* —— 图标合并提示 ——
+   图标与文件夹就在同一面分页网格里，各占一个固定的 1×1 格。把一个图标拖到另一个
+   图标/文件夹上悬停 600ms，目标格才显示虚线框；快速经过仍然是普通自由摆放。 */
+.wall-pager [data-merge-target] > .bento-card {
+  outline: 2px dashed var(--bento-accent);
+  outline-offset: -2px;
+}
+
+/* —— 应用图标块（阶段 B 临时「应用」分区，见 Dashboard.tsx 的 IconTile）——
+   1×1 起步（基准 12 列下 ≈ 82×80px）：留白按这个尺寸调，不要按旧版 268×182 的格子调，
+   否则一个 28px 图标会被 36px 的内边距挤得只剩标签看不见。 */
+.bento-card--icon {
+  /* 原生链接拖拽会在浏览器层面吞掉后续 mousemove（实测事件流断在第 3 帧）——禁掉 */
+  -webkit-user-drag: none;
+  user-select: none;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 6px;
+  text-align: center;
+  text-decoration: none;
+  color: var(--bento-text);
+}
+
+.bento-icon__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--ink-text-2);
+  transition: color 0.18s ease;
+}
+
+.bento-card--icon:hover .bento-icon__glyph {
+  color: var(--ink-accent-text);
+}
+
+.bento-icon__img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+
+.bento-icon__label {
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--bento-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bento-card--icon:hover .bento-icon__label {
+  color: var(--bento-text);
+}
+
+/* —— 阶段 C：分页桌面（react-grid-layout 引擎）——
+   `.wall-grid` 同时带 `.bento-grid` 类只为兼容旧断言与骨架；真正定位由 RGL 的
+   `.react-grid-item` 绝对定位完成，卡片铺满自己的 item。 */
+.wall-pager {
+  position: relative;
+}
+
+/* 桌面舞台：编辑态下组件库抽屉与墙并排（墙占满剩下的宽度）。
+   非编辑态它就是个普通块容器 —— 不影响任何既有布局与断言。 */
+.bento-stage {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.bento-stage > .wall-pager {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 窄屏（<1024px，与列数断点同一把尺）：抽屉改成浮层，别把墙挤成一条 */
+@media (max-width: 1023px) {
+  .bento-stage {
+    display: block;
+  }
+
+  .bento-library {
+    position: fixed;
+    top: 72px;
+    right: 16px;
+    bottom: 16px;
+    z-index: 30;
+    box-shadow: 0 18px 48px rgb(0 0 0 / 45%);
+  }
+}
+
+/* 编辑态给墙一点「正在编辑」的提示：虚线内边框（不改尺寸，不影响网格坐标） */
+.wall-pager[data-edit-mode='1'] {
+  outline: 1px dashed var(--bento-border-strong);
+  outline-offset: 6px;
+  border-radius: var(--bento-radius);
+}
+
+/* 从组件库拖到墙上悬停时：换成实线高亮，明确"松手就放这儿" */
+.wall-pager[data-drop-active='1'] {
+  outline: 2px solid var(--bento-accent);
+  background: color-mix(in srgb, var(--bento-accent) 8%, transparent);
+}
+
+.wall-grid {
+  position: relative;
+  display: block; /* RGL 绝对定位接管；网格模板只留给骨架用 */
+}
+
+.react-grid-item > .bento-card {
+  width: 100%;
+  height: 100%;
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: color-mix(in srgb, var(--bento-accent) 30%, transparent);
+  border-radius: var(--bento-radius);
+  opacity: 1;
+}
+
+/* 编辑态下的卡片与图标样式：光标不再是 pointer，文字与图标不可选中，防止拖拽时意外选中文本 */
+.wall-pager[data-edit-mode='1'] .bento-card {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 编辑态的两个按钮（尺寸 / 移除）压在卡头右上角，给卡头让出 56px ——
+   不让的话状态词和时间会被盖住（实测：通栏总览格的「需处理 刚刚」正好在按钮下面）。 */
+.wall-pager[data-edit-mode='1'] .bento-card__head {
+  padding-right: 56px;
+}
+
+/* —— 整块可拖（P3）——
+   编辑态下链接一律禁掉（图标不带 href、卡内链接不开），卡面除了拖动/缩放没有别的用处，
+   所以不再单独给一个 18px 的 ⠿ 手柄：整个格子就是拖拽面。
+   RGL 的 dragConfig.cancel 负责把「自己会吃鼠标」的三个角排除掉（尺寸键/移除键/缩放把）。 */
+.wall-pager[data-edit-mode='1'] .react-grid-item {
+  cursor: grab;
+}
+
+.wall-pager[data-edit-mode='1'] .react-grid-item:active {
+  cursor: grabbing;
+}
+
+/* 卡面里的可滚区/输入框仍按自己的光标来（grab 是「整块能拖」的提示，不是命令） */
+.wall-pager[data-edit-mode='1'] .bento-card__body {
+  cursor: inherit;
+}
+
+/* 移除按钮：编辑态才出现，贴在最右上角（实底深色保证对比度） */
+.bento-remove-handle {
+  display: none;
+}
+
+.wall-pager[data-edit-mode='1'] .bento-remove-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  z-index: 4;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  background: var(--ink-danger-quiet);
+  border: 1px solid color-mix(in srgb, var(--ink-danger) 35%, transparent);
+  color: var(--ink-danger-text);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+}
+
+.wall-pager[data-edit-mode='1'] .bento-remove-handle:hover {
+  background: color-mix(in srgb, var(--ink-danger) 18%, transparent);
+}
+
+/* —— P2：尺寸磁贴（预设按钮 + 菜单）——
+   按钮在移除键左侧；菜单是墙这一层的 `position: fixed`（见 Dashboard），不会被裁也不会被邻居盖。 */
+.bento-size-handle {
+  display: none;
+}
+
+.wall-pager[data-edit-mode='1'] .bento-size-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 5px;
+  right: 32px;
+  z-index: 4;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  background: var(--ink-3);
+  border: 1px solid var(--bento-border-strong);
+  color: var(--bento-text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.wall-pager[data-edit-mode='1'] .bento-size-handle:hover,
+.wall-pager[data-edit-mode='1'] .bento-size-handle[aria-expanded='true'] {
+  border-color: var(--bento-accent);
+  color: var(--ink-accent-text);
+}
+
+.bento-size-menu {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  width: 132px;
+  background: var(--bento-surface);
+  border: 1px solid var(--bento-border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--bento-shadow-hover);
+}
+
+/* 透明遮罩：只负责「点外面关掉」，不能挡住菜单本身（z-index 低一档） */
+.bento-size-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 59;
+}
+
+.bento-size-menu button {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  text-align: left;
+  font-size: 11px;
+  line-height: 1.3;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--bento-text);
+  cursor: pointer;
+}
+
+.bento-size-menu button:hover {
+  background: var(--bento-inset);
+}
+
+.bento-size-menu button.is-on {
+  border-color: var(--ink-accent);
+  background: var(--ink-accent-quiet);
+  color: var(--ink-accent-text);
+  font-weight: 600;
+}
+
+.bento-size-menu__hint {
+  padding: 4px 8px 2px;
+  border-top: 1px solid var(--bento-border);
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--bento-text-dim);
+}
+
+/* —— P2：自由缩放把（RGL 的 .react-resizable-handle）——
+   只在编辑态存在（resizeConfig.enabled = editMode）；默认那个 5px 小角标在深色卡面上几乎看不见，
+   这里换成实底提手，一眼能看出「角上能拉」。 */
+.wall-pager[data-edit-mode='1'] .react-grid-item > .react-resizable-handle {
+  width: 16px;
+  height: 16px;
+  opacity: 1;
+  z-index: 3;
+}
+
+.wall-pager[data-edit-mode='1'] .react-grid-item > .react-resizable-handle::after {
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--bento-accent);
+  border-bottom: 2px solid var(--bento-accent);
+}
+
+
+/* 页点（D7 ③）：方形小标签 —— 比一排彩色圆点安静，也和界面里其它控件同一套圆角。
+   当前页用「实心 + 反白」，有告警的页在右上角挂一个红点。 */
+.page-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 0 2px;
+}
+
+.page-dots button {
+  position: relative;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1px solid var(--bento-border);
+  color: var(--bento-text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.page-dots button:hover {
+  background: var(--ink-4);
+  color: var(--bento-text);
+}
+
+.page-dots button[aria-current='page'] {
+  background: var(--ink-accent-strong);
+  border-color: var(--ink-accent-strong);
+  color: #fff;
+}
+
+.page-dots button[aria-current='page']:hover {
+  background: var(--ink-accent-solid);
+  border-color: var(--ink-accent-solid);
+}
+
+.page-dots button:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.page-dots__alert {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-danger);
+  border: 1px solid var(--bento-bg);
+}
+
+/* 拖到视口边缘的高亮（命令式 attr，拖拽中不走 React）：松手翻到相邻页 */
+.wall-pager::before,
+.wall-pager::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 40px;
+  width: 56px;
+  pointer-events: none;
+  z-index: 5;
+  border-radius: var(--radius);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.wall-pager::before {
+  left: 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bento-accent) 38%, transparent), transparent);
+}
+
+.wall-pager::after {
+  right: 0;
+  background: linear-gradient(270deg, color-mix(in srgb, var(--bento-accent) 38%, transparent), transparent);
+}
+
+.wall-pager[data-drag-edge='left']::before,
+.wall-pager[data-drag-edge='right']::after {
+  opacity: 1;
+}
+
+/* 文件夹块：前 4 个成员 2×2 叠拼（手机同款） */
+.bento-folder {
+  cursor: pointer;
+}
+
+.bento-folder__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+}
+
+.bento-folder__mini {
+  width: 20px;
+  height: 20px;
+  font-size: 15px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bento-inset);
+  border-radius: var(--radius);
+  object-fit: contain;
+  color: var(--bento-text-dim);
+}
+
+/* 文件夹浮层：贴在墙右上角的小面板（成员打开/移出、重命名、解散） */
+.folder-overlay {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 50;
+  width: min(320px, calc(100% - 16px));
+  background: var(--bento-surface);
+  border: 1px solid var(--bento-border-strong);
+  border-radius: var(--bento-radius);
+  box-shadow: var(--bento-shadow-hover);
+  padding: 10px;
+}
+
+.folder-overlay__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.folder-overlay__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--bento-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-overlay__count {
+  font-size: 11px;
+  color: var(--bento-text-dim);
+}
+
+.folder-overlay__head button,
+.folder-overlay__list li > button {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  background: var(--bento-inset);
+  border: 1px solid var(--bento-border);
+  color: var(--bento-text-dim);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.folder-overlay__head button:hover,
+.folder-overlay__list li > button:hover {
+  color: var(--bento-text);
+  border-color: var(--bento-border-strong);
+}
+
+.folder-overlay__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 46vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.folder-overlay__list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.folder-overlay__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--bento-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.folder-overlay__open:hover {
+  background: var(--bento-inset);
+}
+
+.folder-overlay__label {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-overlay__empty {
+  font-size: 12px;
+  color: var(--bento-text-dim);
+  padding: 6px 8px;
+}

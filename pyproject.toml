@@ -1,0 +1,82 @@
+[project]
+name = "yhub"
+dynamic = ["version"]
+description = "Y-Hub: one declarative adaptor, three faces (HTTP / MCP / CLI), one local-first workspace"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Yifeitao" }]
+keywords = [
+  "local-first",
+  "personal-information",
+  "dashboard",
+  "mcp",
+  "cli",
+  "fastapi",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Web Environment",
+  "Framework :: FastAPI",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Desktop Environment",
+  "Topic :: Utilities",
+]
+dependencies = [
+  "fastapi>=0.141.1",
+  "requests>=2.32.0",
+  "uvicorn[standard]>=0.53.0",
+  "mcp[cli]>=2.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yhub-labs/yhub"
+Repository = "https://github.com/yhub-labs/yhub"
+Issues = "https://github.com/yhub-labs/yhub/issues"
+
+[project.scripts]
+yhub = "yhub.cli.main:main"
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+# 版本号唯一真源：yhub/__init__.py 的 __version__（运行时也用同一个值）。
+[tool.hatch.version]
+path = "yhub/__init__.py"
+
+# 单一顶层包：site-packages 里只有 yhub/，不再出现 cli/ server/ web/ 这类通用目录
+# （PyPI 上已经有叫 server 的分发，顶层目录撞车会导致文件互相覆盖）。
+[tool.hatch.build.targets.wheel]
+packages = ["yhub"]
+# 构建期硬依赖（缺了直接失败，不会静默发出半成品）：
+#   web/dist  —— 前端静态文件（`cd web && npm run build`）
+#   capsules/ —— 随包分发的只读示例胶囊（`make capsules`）
+force-include = { "web/dist" = "yhub/web/dist", "capsules" = "yhub/_data/capsules", "THIRD-PARTY.md" = "yhub/THIRD-PARTY.md" }
+
+# sdist 里也要带上前端与胶囊构建产物（它们被 .gitignore 忽略，默认不进 sdist）。
+# 目标是「源码安装也能跑」，不是「只发 wheel」；发布流程仍建议只传 wheel（见 Makefile 的 publish）。
+[tool.hatch.build.targets.sdist]
+include = [
+  "/yhub",
+  "/capsules",
+  "/web/dist",
+  "/README.md",
+  "/THIRD-PARTY.md",
+  "/LICENSE",
+  "/pyproject.toml",
+]
+artifacts = ["/web/dist", "/capsules"]

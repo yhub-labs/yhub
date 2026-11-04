@@ -1,0 +1,35 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+build/
+dist/
+*.egg-info/
+
+# GUI 前端（web/）
+node_modules
+node_modules/
+web/dist/
+web/.vite/
+
+.DS_Store
+.idea/
+.vscode/
+
+# Tauri
+tauri/target/
+
+# 本地 worktree（agent 会话用，绝不入库）
+.worktrees/
+
+# 胶囊构建产物（由 capsule-src/ 构建得到，运行时只扫这一层；不入库）
+capsules/*
+!capsules/.gitkeep

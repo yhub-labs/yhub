@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  只放需要覆盖默认值的键，tauri bundler 会把它合并进生成的 Info.plist。
+  LSUIElement=YES：打包成 .app 后即为 agent/accessory 应用——Dock 无图标、Cmd+Tab 不出现。
+  （运行时还有 main.rs 里的 set_activation_policy(Accessory)，两者互为保险。）
+
+  NSLocalNetworkUsageDescription：macOS 15+ 的「本地网络」隐私。app 要连内网地址
+  （192.168.x.x / 10.x.x.x）必须声明它，否则系统连问都不问、直接静默拒绝，连接会以
+  [Errno 65] No route to host (EHOSTUNREACH) 失败 —— 看起来像「服务挂了」，
+  但同一台机器上从终端直连同一地址是通的。子进程（app 拉起的后端）继承这个归属。
+-->
+<plist version="1.0">
+<dict>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Y-Hub 需要访问本地网络，才能连接你在局域网内运行的服务。</string>
+</dict>
+</plist>
