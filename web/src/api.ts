@@ -15,6 +15,8 @@ export type Tool = {
   ready: boolean
   status: string
   keywords?: string
+  /** Set when the plugin ships its own screen (`presentation.panel`); rendered in an iframe. */
+  panel?: string
 }
 
 export type RcloneProbe = {

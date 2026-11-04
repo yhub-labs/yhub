@@ -346,6 +346,22 @@ def _validate_faces(faces: Any, where: str) -> dict:
     return out
 
 
+def _check_panel(entry: Any, dir_path: Path, where: str) -> None:
+    """`presentation.panel` is one self-contained HTML file inside the plugin directory.
+
+    The host serves it at `/api/plugins/<id>/panel` and the workbench shows it in an iframe, so the
+    plugin ships its own screen without the host compiling anything: no shared React tree, no build
+    coupling, and a plugin that only has an API still works (it just has no panel). Path rules are
+    enforced here rather than at request time, so a bad declaration is red at startup.
+    """
+    if not isinstance(entry, str) or not entry.strip():
+        raise _bad(where, tr("plugins.err.panel_not_string", value=repr(entry)))
+    if ".." in Path(entry).parts or Path(entry).is_absolute():
+        raise _bad(where, tr("plugins.err.panel_path", value=repr(entry)))
+    if not (dir_path / entry).is_file():
+        raise _bad(where, tr("plugins.err.panel_missing", entry=repr(entry)))
+
+
 def _validate_manifest(raw: Any, dir_path: Path, *, allow_dir_mismatch: bool = False) -> dict:
     """Anything unreadable / misdeclared is a ValueError locating ``<id>/plugin.json.<field>``, never a silent
     degradation."""
@@ -414,6 +430,8 @@ def _validate_manifest(raw: Any, dir_path: Path, *, allow_dir_mismatch: bool = F
             raise _bad(f"{p_where}.launcher",
                        tr("plugins.err.launcher_not_bool", value=repr(presentation['launcher'])))
         check_tiles(presentation.get("tiles"), where=p_where)
+        if "panel" in presentation:
+            _check_panel(presentation["panel"], dir_path, f"{p_where}.panel")
     if "config" in raw:
         cfg = raw["config"]
         if not isinstance(cfg, list):

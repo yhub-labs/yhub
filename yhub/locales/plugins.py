@@ -113,6 +113,11 @@ EN = {
     "plugins.err.locales_not_object": "locales file must be a JSON object of key → text, got {type}",
     "plugins.err.locales_bad_entry": "locales entries must be string → string; bad keys: {keys}",
     "plugins.err.locales_missing_keys": "the manifest uses @keys that the locales do not define: {keys}",
+    "plugins.err.panel_not_string": "presentation.panel must be a path string, got {value}",
+    "plugins.err.panel_path": "presentation.panel must be a relative path inside the plugin: {value}",
+    "plugins.err.panel_missing": "presentation.panel points at {entry}, which does not exist in the plugin directory",
+    "plugins.err.panel_undeclared": "{id} does not declare a panel (no presentation.panel in its manifest)",
+    "plugins.err.unknown_id": "no plugin installed under the id {id}",
     "plugins.err.plugin_py_missing": "missing plugin.py (the directory convention = plugin.json + plugin.py)",
     # ------------------------------------------------------------ install / remove (plugin_manager.py)
     "plugins.err.download_failed": "download failed: {url} ({reason})",
@@ -337,6 +342,11 @@ ZH = {
     "plugins.err.locales_not_object": "locales 文件必须是「键 → 文本」的 JSON 对象，实际是 {type}",
     "plugins.err.locales_bad_entry": "locales 的条目必须是「字符串 → 字符串」，有问题的键：{keys}",
     "plugins.err.locales_missing_keys": "manifest 里用到、但 locales 没定义的键：{keys}",
+    "plugins.err.panel_not_string": "presentation.panel 必须是路径字符串，实际是 {value}",
+    "plugins.err.panel_path": "presentation.panel 必须是插件目录内的相对路径：{value}",
+    "plugins.err.panel_missing": "presentation.panel 指向 {entry}，但插件目录里没有这个文件",
+    "plugins.err.panel_undeclared": "{id} 没有声明面板（manifest 里没有 presentation.panel）",
+    "plugins.err.unknown_id": "没有装上 id 为 {id} 的插件",
     "plugins.err.plugin_py_missing": "缺 plugin.py（目录约定 = plugin.json + plugin.py）",
     # ------------------------------------------------------------ install / remove (plugin_manager.py)
     "plugins.err.download_failed": "下载失败：{url}（{reason}）",

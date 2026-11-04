@@ -458,6 +458,9 @@ export default function App() {
   }))
 
   const current = tools.find((t) => t.id === active)
+  // A plugin that ships `presentation.panel` gets its own screen (an iframe served by the host);
+  // `panelUrl` is undefined for every tool without one, including the core React panels.
+  const panelUrl = current?.panel
 
   // Deep-linking to a panel that is not in /api/tools (the wall) leaves current undefined — fall
   // back to the card registry for the header title/icon so the h1 is never empty (same copy as the
@@ -733,8 +736,20 @@ export default function App() {
               )}
               {active === 'scheduler' && <Scheduler />}
               {active === 'rss' && <Rss />}
-              {/* The backend auto-discovers new adapters, but someone must write each screen: tools without a panel say so here */}
-              {!PANEL_TOOLS.includes(active) && <CardState kind="empty">{t('app.noPanel')}</CardState>}
+              {/* A plugin that ships `presentation.panel` brings its own screen: the host serves one
+                  HTML file and shows it in an iframe, so a third-party tool needs no build step here.
+                  Tools with neither a core panel nor a declared one say so. */}
+              {panelUrl && (
+                <iframe
+                  key={panelUrl}
+                  src={panelUrl}
+                  title={current?.name ?? active}
+                  className="tool-panel-frame"
+                />
+              )}
+              {!PANEL_TOOLS.includes(active) && !panelUrl && (
+                <CardState kind="empty">{t('app.noPanel')}</CardState>
+              )}
             </>
           )}
         </section>

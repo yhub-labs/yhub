@@ -83,12 +83,21 @@ Tiles are the **first-class producers** of wall cells; the center only does regi
 | `critical` | ❌ | one failure → `alert` (otherwise ≥2 in a row) |
 | `enabled` / `span` / `page` / `params` | ❌ | off-screen flag, `sm/md/lg/full`, default page, fetch params |
 
-### 4.1 `presentation.panel` — declared but not loaded
+### 4.1 `presentation.panel` — the plugin's own screen
 
-The loader accepts the key and the host ignores it: a third-party tool page renders the "no panel yet"
-placeholder. Panels for `zdic` / `memos` / `gemini` used to ship here and now live with the plugins
-(`yhub-labs/yhub-plugins/<id>/panel/`, contract in that repo's `docs/panels.md`). The host needs a panel
-registry (or an iframe contract like capsules) before a plugin can supply its own page.
+A plugin can ship its tool page as **one self-contained HTML file**:
+
+```jsonc
+"presentation": { "panel": "panel/index.html" }
+```
+
+The host serves it at `GET /api/plugins/<id>/panel` (`text/html`, `Cache-Control: no-store`, a permissive-but-sane CSP) and `/api/tools` then carries `"panel": "/api/plugins/<id>/panel"` for that tool. The workbench renders that URL in an `<iframe class="tool-panel-frame">`; a tool with neither a core panel nor a declared one still shows the "no panel yet" placeholder.
+
+Why an iframe instead of importing the plugin's React component: the frontend is compiled into the host bundle at build time, so a runtime `import()` of third-party code would tie every plugin to this repository's React tree, component paths and i18n provider — and a plugin written in anything else could not ship a screen at all. An iframe has exactly one contract, the HTTP API, which the plugin already speaks. The panel can still reach `/api/*` (same origin) and reads the UI language from `/api/settings`.
+
+Rules the loader enforces at startup (a bad declaration is red, never a dead page): the value is a string, a relative path inside the plugin directory (no `..`, no absolute), and the file exists. `panel/index.html?q=你` is the plugin's own business — `zdic` uses it for shareable deep links.
+
+The old React panels for `zdic` / `memos` / `gemini` remain in `yhub-labs/yhub-plugins/<id>/panel/` as reference implementations; they import host modules and do not build standalone. A plugin that wants a real screen should ship a single HTML file instead.
 
 `cells.<id>.*` in `dashboard.json` always wins last (`enabled/zone/order/title/href/stale_after/critical` + same-named `params` keys).
 

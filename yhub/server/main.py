@@ -13,6 +13,7 @@ Adding a tool does not require touching this file.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import threading
@@ -339,6 +340,52 @@ def health() -> dict:
     return {"ok": True, "version": VERSION, "service": "Y-Hub GUI"}
 
 
+#: Panels are trusted plugin code (a plugin already runs Python in this process), so this CSP is
+#: hygiene rather than a sandbox: no cross-origin navigations, inline styles/scripts allowed because
+#: the panel is one self-contained file.
+PANEL_CSP = (
+    "default-src 'self' https: data: blob:; "
+    "script-src 'self' 'unsafe-inline' https:; "
+    "style-src 'self' 'unsafe-inline' https:; "
+    "img-src 'self' data: https:; "
+    "connect-src 'self' https:; "
+    "form-action 'none'; "
+    "base-uri 'none'"
+)
+
+
+@app.get("/api/plugins/{plugin_id}/panel")
+def plugin_panel(plugin_id: str):
+    """Serve a plugin's own screen (`presentation.panel`) as one HTML file.
+
+    The workbench shows it in an iframe, so a plugin ships its UI with no build step in this repo and
+    no shared component tree. Missing plugin / no declaration / file gone after install → 404 with a
+    plain message; the workbench falls back to its placeholder.
+    """
+    from fastapi.responses import FileResponse
+    from .adapters import _plugin_loader as L
+
+    dir_path = L.plugins_dir() / plugin_id
+    manifest_path = dir_path / "plugin.json"
+    if not manifest_path.is_file():
+        raise ToolError(tr("plugins.err.unknown_id", id=plugin_id))
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise ToolError(tr("plugins.err.manifest_not_json", path=f"{plugin_id}/plugin.json",
+                           line=0, message="unreadable"))
+    entry = ((manifest.get("presentation") or {}) if isinstance(manifest, dict) else {}).get("panel")
+    if not entry:
+        raise ToolError(tr("plugins.err.panel_undeclared", id=plugin_id))
+    target = (dir_path / str(entry)).resolve()
+    if dir_path.resolve() not in target.parents or not target.is_file():
+        raise ToolError(tr("plugins.err.panel_missing", entry=repr(entry)))
+    response = FileResponse(target, media_type="text/html")
+    response.headers["Content-Security-Policy"] = PANEL_CSP
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.get("/api/tools")
 def tools() -> dict:
     """The tool list behind the sidebar / launcher (`_registered_adapters` is rebuilt live, so a
@@ -358,6 +405,10 @@ def tools() -> dict:
             "status": tr_text(status_val),
             # Optional: launcher search keywords declared by the adapter (omitted when absent)
             **({"keywords": meta["keywords"]} if meta.get("keywords") else {}),
+            # Optional: a plugin that ships its own screen (`presentation.panel`) — the workbench
+            # renders it in an iframe instead of the "no panel yet" placeholder.
+            **({"panel": f"/api/plugins/{meta['id']}/panel"}
+               if (meta.get("presentation") or {}).get("panel") else {}),
         })
     return {"ok": True, "tools": tool_list}
 
