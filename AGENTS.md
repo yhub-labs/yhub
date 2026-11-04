@@ -66,6 +66,7 @@ cd web && npm run smoke          # headless Chrome end-to-end (asserts read <mai
 cd web && node verify-cli.mjs    # MCP tools/list + CLI --json ≡ HTTP body
 cd web && node verify-bento-grid.mjs && node verify-bento-qa.mjs && node verify-contrast.mjs
 cd web && node verify-settings-ui.mjs && node verify-edit-mode.mjs
+cd web && node verify-tiddlywiki-save.mjs   # 随包 TiddlyWiki 自动保存（自起测试后端）
 cd tauri && cargo build          # after changing tauri/ (build the frontend first)
 ./scripts/check-versions.sh
 make verify-backend verify-plugins verify-settings

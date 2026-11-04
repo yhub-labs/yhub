@@ -4,15 +4,19 @@
 
 This is the **hosting contract**. Implementation: `yhub/server/adapters/capsules.py` (a capability-only module: it declares `ROUTES` and takes no launcher entry). Config keys are owned by `yhub/server/adapters/settings.py`; see [config.md](config.md).
 
+## 0. Bundled capsules
+
+The system layer ships a small starter set: `hello` (built from `capsule-src/hello/`) and **TiddlyWiki**. TiddlyWiki's single-file HTML is **downloaded from the official site at build time** (`scripts/build-capsules.sh` → `https://tiddlywiki.com/empty.html`, the latest released empty wiki), so packaging always picks up the current release. Vendoring is a data table, not a code path: `vendored_capsules()` lists `name|url` lines and any extra official single-file app is one more line (its URL can be overridden with `YHUB_CAPSULE_URL_<NAME>`, e.g. `YHUB_CAPSULE_URL_TIDDLYWIKI`). An offline build reuses the previous `capsules/tiddlywiki.html` and says so loudly; with no artifact at all the build fails. The save path is the reason the copy-on-write rule in §1 exists: the shipped file is read-only, but editing the bundled wiki still persists (see §3).
+
 ## 1. Layers and config keys
 
 | Layer | Location | Writable |
 | --- | --- | --- |
 | user | `capsules_dir` (`~/…` expanded) | yes — PUT / DELETE / sandbox files land here |
-| system | bundled `capsules/` (repo root; `yhub/_data/capsules` in the wheel; `YHUB_SYSTEM_CAPSULES_DIR` overrides) | no |
+| system | bundled `capsules/` (repo root; `yhub/_data/capsules` in the wheel; `YHUB_SYSTEM_CAPSULES_DIR` overrides) | no — its first save is copied into the user layer (copy-on-write, below) |
 
 * The same relative path resolves **user first**; the system-layer file is shadowed, so upgrades never overwrite user edits.
-* `PUT` on a system-layer entry → **403**. Sandbox data always writes to the user layer (auto-creating `~/Y-Hub/capsules` when unset); reads prefer user data, then the shipped default.
+* A `PUT` on a system-layer entry is **copy-on-write**: the bytes are written to the user layer under the same relative path (creating parent directories, auto-creating `~/Y-Hub/capsules` when unset), and from then on the user copy is what the URL resolves to. The shipped file is never modified, so upgrading the software replaces the built-in original without touching the user's edits. The rule is layer-based, not capsule-specific: it applies to every bundled `.html`/`.htm` (loose file or directory capsule) with no name checks. Data files follow the same split: a shipped default keeps being read until the user writes that file, and writes/deletes always target the user layer. Sandbox data already behaves this way (writes always land in the user layer; reads prefer user data, then the shipped default). The save only fails with **403** when the user layer cannot be created (permissions).
 * `capsules_dir = ""` (or a directory that does not exist) turns the user layer off — `/capsules/*` then serves only built-in capsules. `GET /api/capsules` reports the tri-state via `configured` / `problem` (`unset` / `missing` / `not_dir` / `unwritable` / `null`) plus `recommended_dir`. `POST /api/capsules/ensure` with `{path?}` mkdirs (default `~/Y-Hub/capsules`) and writes the key through `set_values`.
 * Listing items: `relpath` / `name` / `path` / `url_path` / `url` / `bytes` / `mtime` / `source` / `writable` / `enabled` / `title` / `icon` / `description`, alongside `capsule_roots`, `max_capsules` (200), `max_bytes` (32 MiB). `POST /api/capsules/toggle` writes `capsules_disabled` (entries match `layer:relpath`, `relpath`, the top-level directory, or the bare name).
 
@@ -41,12 +45,12 @@ The slash is not cosmetic: a relative `./data/` resolves against the current URL
 | `GET` | entry html verbatim (`text/html; charset=utf-8`, `no-store`, `ETag`, hosted-page CSP); with no entry, a sandbox data file (`Content-Type` from the suffix) |
 | `HEAD` | same headers plus `Content-Length`, no body (the `ETag` probe) |
 | `OPTIONS` | `200` + `DAV: 1`, `Allow: GET, HEAD, OPTIONS, PUT, DELETE`, `MS-Author-Via: DAV`; 404 when neither an entry nor a sandbox path resolves |
-| `PUT` | entry: overwrite only, **never create** → `204` + new `ETag`. Sandbox: create or overwrite, parents auto-created |
-| `DELETE` | one sandbox data file (`204`); the entry html is always `405` |
+| `PUT` | entry: write back to the file that was served, **never create a new capsule** → `204` + new `ETag`; a **system-layer** entry is copied into the user layer first (copy-on-write, same relative path) and then written. Sandbox: create or overwrite, parents auto-created |
+| `DELETE` | one sandbox data file **in the user layer** (`204`); a shipped default is never removed; the entry html is always `405` |
 
 The rig exists because single-file capsules (TiddlyWiki's `put.js`) only enable saving when `OPTIONS` answers 2xx **with** a `DAV` header, then `HEAD`s for the `ETag` and sends `If-Match`; without the 412 two editors silently clobber each other.
 
-`PUT` / `DELETE` gates: `If-Match` mismatch → **412** (body carries the current `ETag`; a missing `If-Match` and `*` are allowed) · body over 32 MiB → **413** · sandbox folder at 2000 files or a capsule over 512 MiB → **413** · non-local `Origin` → **403** · nothing resolves → **404**. Writes are atomic (temp file + `os.replace`) and keep the original permission bits.
+`PUT` / `DELETE` gates: `If-Match` mismatch → **412** (body carries the current `ETag`; a missing `If-Match` and `*` are allowed) · body over 32 MiB → **413** · sandbox folder at 2000 files or a capsule over 512 MiB → **413** · non-local `Origin` → **403** · system-layer save with no writable user layer → **403** · nothing resolves → **404**. Writes are atomic (temp file + `os.replace`) and keep the original permission bits.
 
 ## 4. Sandbox (a folder per little app)
 
@@ -82,6 +86,7 @@ curl -s --noproxy '*' http://127.0.0.1:8790/api/capsules | python3 -m json.tool 
 curl -sI --noproxy '*' http://127.0.0.1:8790/capsules/<name>                     # no-store + ETag + per-capsule CSP
 curl -s -X OPTIONS -D - -o /dev/null --noproxy '*' http://127.0.0.1:8790/capsules/<name> | grep -i dav
 # PUT only against a throwaway library (YHUB_CONFIG_DIR + YHUB_SYSTEM_CAPSULES_DIR): it really rewrites the file
-make verify-backend                      # capsule listing, metadata, resolution, PUT codes, isolation, sandbox, lifecycle
+make verify-backend                      # capsule listing, metadata, resolution, PUT codes, isolation, sandbox, lifecycle, bundled-capsule copy-on-write
 cd web && npm run build && npm run smoke  # launcher + settings UI; verify-settings-ui.mjs covers the shell side
+cd web && node verify-tiddlywiki-save.mjs # real Chrome: bundled TiddlyWiki autosave → user-layer copy (self-starts a temp backend)
 ```

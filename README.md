@@ -13,7 +13,7 @@ yhub/server/mcp_server.py  the same adapters over MCP (stdio)
 yhub/cli/                  host commands + CLI generated from adapter declarations
 web/                       Vite + React + TS UI: launcher, workbench, settings, wall
 tauri/                     macOS shell: tray, global hotkey, frameless window (no Python inside)
-capsules/                  example single-file HTML apps shipped with the package
+capsules/                  single-file HTML capsules shipped with the package (built + TiddlyWiki)
 ```
 
 - Capabilities live in `yhub/server/adapters/`; the UI only renders them.
@@ -55,7 +55,7 @@ Commands declared by core plugins (`rclone`, `rss`, `schedule`) and by whatever 
 ## Extension points
 
 1. **Adapters** — add `yhub/server/adapters/<id>.py` exporting `TOOL_META` (`faces.routes` / `faces.mcp` / `faces.cli`, plus `presentation.tiles` for wall cells). No other file changes.
-2. **Capsules** — point `settings.json: capsules_dir` at a directory of single-file HTML apps: each file is served at `/capsules/<path>` and saved back with `PUT`. See [`docs/capsules.md`](https://github.com/yhub-labs/yhub/blob/main/docs/capsules.md).
+2. **Capsules** — single-file HTML apps served at `/capsules/<path>` and saved back with `PUT`. TiddlyWiki (downloaded from its official site at build time) ships with the package; a bundled capsule's first save is copied into your writable library, so upgrades never overwrite your edits. See [`docs/capsules.md`](https://github.com/yhub-labs/yhub/blob/main/docs/capsules.md).
 3. **Plugins** — third-party adapters installed into the config root with `yhub plugin install <id | owner/repo | path>`; they are not distributed with this repository. Registry format: [`examples/registry.example.json`](https://github.com/yhub-labs/yhub/blob/main/examples/registry.example.json); conventions: [`docs/plugins.md`](https://github.com/yhub-labs/yhub/blob/main/docs/plugins.md).
 
 ## Verification

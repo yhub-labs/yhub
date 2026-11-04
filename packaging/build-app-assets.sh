@@ -10,7 +10,7 @@
 #
 # 两件事：
 #   1) web/dist —— 前端在**编译期**嵌进 Tauri 二进制（改完前端不重建，装的还是旧界面）；
-#   2) capsules/ —— 随包分发的只读示例胶囊（由 capsule-src/ 构建）。
+#   2) capsules/ —— 随包分发的只读胶囊：capsule-src/ 构建出的示例 + 构建时从官网下载的 TiddlyWiki。
 #
 # cwd 说明：Tauri v2 的 beforeBuildCommand 在**仓库根**执行，所以 tauri.conf.json
 # 里写的是 `bash packaging/...`。

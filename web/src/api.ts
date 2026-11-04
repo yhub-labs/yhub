@@ -620,7 +620,8 @@ export type VaultCapsule = {
   description?: string
   /** which layer: user (your own library) | system (built-in examples shipped with the package) */
   source?: 'user' | 'system'
-  /** whether that layer is writable (always false for the built-in layer; saving returns 403) */
+  /** whether that layer is writable (always false for the built-in layer: its first save is copied
+   * into the user library, so the shipped file stays untouched) */
   writable?: boolean
   /** unique id, e.g. "system:hello/index.html" or "user:demo.html" */
   id?: string

@@ -1054,40 +1054,134 @@ finally:
     shutil.rmtree(work, ignore_errors=True)
 PY
 
-say "3.8/5 内置胶囊层：随包分发 + 只读 + 页面可取"
+say "3.8/5 内置胶囊层：随包分发（含 TiddlyWiki）+ 页面可取 + 首次保存落用户副本"
 stop_backend || fail "上一轮后端没停下来"
 SYSTEM_CAPS_DIR=""
+# 内置层临时 fixture：一个「目录型 + 自带出厂数据」的胶囊，用来验 copy-on-write 之后
+# 「没写过的出厂数据还能不能读到」以及「写入/删除只碰用户层」。跑完删掉（capsules/ 本来就是构建产物）。
+SYSTEM_FIXTURE="$REPO_ROOT/capsules/verify-system"
+rm -rf "$SYSTEM_FIXTURE"
+mkdir -p "$SYSTEM_FIXTURE/app/data"
+printf '<!doctype html>\n<html><body>system fixture</body></html>\n' > "$SYSTEM_FIXTURE/app/index.html"
+printf '{"seed":true}\n' > "$SYSTEM_FIXTURE/app/data/seed.json"
 start_and_wait builtin-capsules || { stop_backend || true; fail "带内置胶囊层启动失败"; }
 "$PY" - "$PORT" <<'CAPASSERT' || { stop_backend; fail "内置胶囊层断言未通过"; }
-import json, sys, urllib.error, urllib.parse, urllib.request
+import json, os, sys, urllib.error, urllib.parse, urllib.request
 
 base = f"http://127.0.0.1:{int(sys.argv[1])}"
 
 
-def get(path):
-    with urllib.request.urlopen(base + path, timeout=30) as resp:
-        return resp.status, resp.read()
+def call(path, method="GET", data=None, headers=None):
+    req = urllib.request.Request(base + path, data=data, method=method, headers=headers or {})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.status, resp.read(), resp.headers
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read(), exc.headers
 
 
-listing = json.loads(get("/api/capsules")[1])
+listing = json.loads(call("/api/capsules")[1])
 sysdir = listing.get("system_capsules_dir") or ""
 assert sysdir, "系统层目录没定位到（仓库 capsules/ 为空？先 make capsules）"
 sys_caps = [c for c in listing["capsules"] if c.get("source") == "system"]
 assert len(sys_caps) >= 1, f"一个内置胶囊都没有：{[c.get('relpath') for c in sys_caps]}"
 assert all(c.get("writable") is False for c in sys_caps), "内置层不该是可写"
-one = sys_caps[0]
-page = "/capsules/" + urllib.parse.quote(one["url_path"])
-status, body = get(page)
-assert status == 200 and b"<html" in body.lower(), f"内置胶囊页面打不开：{page} HTTP {status}"
-req = urllib.request.Request(base + page, data=b"x", method="PUT")
-try:
-    urllib.request.urlopen(req, timeout=10)
-    raise AssertionError("内置胶囊竟然可写（应 403）")
-except urllib.error.HTTPError as exc:
-    assert exc.code == 403, f"内置胶囊 PUT 该 403，实际 {exc.code}"
-print(f"PASS 内置胶囊层：{len(sys_caps)} 个（{', '.join(c['relpath'] for c in sys_caps)}），只读，页面可取")
+# 随包自带的 TiddlyWiki：打包时从官网下载的单文件 HTML（make capsules 也会取）
+tw = next((c for c in sys_caps if c["relpath"] == "tiddlywiki.html"), None)
+assert tw is not None, f"随包胶囊里缺 tiddlywiki.html：{[c['relpath'] for c in sys_caps]}"
+sys_file = os.path.join(sysdir, "tiddlywiki.html")
+before = open(sys_file, "rb").read()
+assert len(before) > 1_000_000 and b"tiddlywiki" in before.lower(), \
+    f"tiddlywiki.html 不像官方单文件产物（{len(before)} 字节）：重新 make capsules"
+
+# 1) 内置胶囊能打开，且带「单文件应用能活」的页面头（eval / https: / no-store / ETag）
+page = "/capsules/" + urllib.parse.quote(tw["url_path"])
+status, body, headers = call(page)
+assert status == 200 and body == before, f"内置胶囊页面打不开或内容不对：{page} HTTP {status}"
+assert headers.get("Cache-Control") == "no-store" and headers.get("ETag"), "内置胶囊页面缺 no-store / ETag"
+csp = headers.get("Content-Security-Policy", "")
+assert "unsafe-eval" in csp and "https:" in csp.split("script-src")[-1].split(";")[0], \
+    f"内置胶囊页面 CSP 不完整：{csp!r}"
+status, _, headers = call(page, method="OPTIONS")
+assert status == 200 and headers.get("DAV"), f"内置胶囊 OPTIONS 必须 200 + DAV：HTTP {status}"
+status, _, headers = call(page, method="HEAD")
+etag = headers.get("ETag")
+assert status == 200 and etag, f"内置胶囊 HEAD 必须给 ETag：HTTP {status}"
+print(f"PASS 内置胶囊层：{len(sys_caps)} 个（{', '.join(c['relpath'] for c in sys_caps)}），"
+      f"tiddlywiki 页面 / DAV / ETag 都对")
+
+# 2) 保存：内置层只读，但**第一次保存要落成用户层副本**（copy-on-write）——
+#    这正是「装完自带 TiddlyWiki，改完能存」的关键：随包文件只升级、不被用户编辑污染。
+#    TiddlyWiki 的 put.js 就是这样：OPTIONS 探到 DAV → HEAD 取 ETag → PUT 带 If-Match。
+user_dir = listing.get("capsules_dir") or ""
+assert user_dir, "这一相 capsules_dir 该已配置（保存需要可写用户层）"
+user_file = os.path.join(user_dir, "tiddlywiki.html")
+assert not os.path.exists(user_file), "内置胶囊的保存断言要求用户层还没有同名副本"
+
+saved = b"<!doctype html>\n<html><body><h1>TiddlyWiki \xe9\xaa\x8c\xe6\x94\xb6</h1></body></html>\n"
+status, _, headers = call(page, method="PUT", data=saved,
+                          headers={"If-Match": etag, "Content-Type": "text/html;charset=UTF-8"})
+assert status == 204, f"内置胶囊第一次保存该 204（落成用户副本），实际 HTTP {status}：{headers}"
+assert open(user_file, "rb").read() == saved, f"保存没落到用户层副本：{user_file}"
+assert open(sys_file, "rb").read() == before, "内置文件被写坏了（升级不该覆盖/被用户编辑污染）"
+status, body, headers = call(page)
+assert status == 200 and body == saved and headers.get("ETag") not in (None, etag), \
+    "保存后 GET 该命中用户副本并给新 ETag"
+after = json.loads(call("/api/capsules")[1])
+tw_after = [c for c in after["capsules"] if c["relpath"] == "tiddlywiki.html"]
+assert len(tw_after) == 1 and tw_after[0]["source"] == "user" and tw_after[0]["writable"] is True, \
+    f"保存后列表该只留用户层那一份（用户层遮蔽内置层）：{tw_after}"
+status, _, _ = call(page, method="PUT", data=b"x", headers={"If-Match": etag})
+assert status == 412, f"过期 If-Match 应该 412（TiddlyWiki 据此报编辑冲突），实际 HTTP {status}"
+print("PASS 内置胶囊保存：第一次 PUT 落成用户层副本（204 + 新 ETag）、随包文件未动、过期 If-Match 412")
+
+# 3) 这条规则对**任何**内置胶囊都成立（不是给 tiddlywiki 特判）：目录型胶囊（hello/index.html）
+#    同样首存落成用户副本，随包原件不动。产品代码里没有任何按名字分支。
+hello = next((c for c in sys_caps if c["relpath"] == "hello/index.html"), None)
+if hello is not None:
+    hello_page = "/capsules/" + urllib.parse.quote(hello["url_path"])
+    hello_sys = os.path.join(sysdir, "hello", "index.html")
+    hello_before = open(hello_sys, "rb").read()
+    _, _, h = call(hello_page, method="HEAD")
+    saved2 = b"<!doctype html>\n<html><body>hello user copy</body></html>\n"
+    status, _, _ = call(hello_page, method="PUT", data=saved2,
+                        headers={"If-Match": h.get("ETag"), "Content-Type": "text/html;charset=UTF-8"})
+    assert status == 204, f"目录型内置胶囊首次保存该 204，实际 HTTP {status}"
+    hello_user = os.path.join(user_dir, "hello", "index.html")
+    assert open(hello_user, "rb").read() == saved2, "目录型胶囊的保存没落到用户层副本"
+    assert open(hello_sys, "rb").read() == hello_before, "目录型胶囊的随包原件被写坏了"
+    print("PASS 内置胶囊保存对目录型胶囊同样生效（copy-on-write 与文件形态、名字无关）")
+
+# 4) 内置层自带的**出厂数据**：入口被复制到用户层后，没写过的数据文件仍从内置层读；
+#    写入 / 删除只碰用户层，出厂数据永远不动。
+fx_entry = "/capsules/verify-system/app/index.html"
+fx_data = "/capsules/verify-system/app/data/seed.json"
+fx_sys_entry = os.path.join(sysdir, "verify-system", "app", "index.html")
+fx_sys_data = os.path.join(sysdir, "verify-system", "app", "data", "seed.json")
+fx_before = open(fx_sys_data, "rb").read()
+_, _, h = call(fx_entry, method="HEAD")
+status, _, _ = call(fx_entry, method="PUT", data=b"<!doctype html>\n<html><body>saved</body></html>\n",
+                    headers={"If-Match": h.get("ETag"), "Content-Type": "text/html;charset=UTF-8"})
+assert status == 204, f"内置目录型胶囊保存该 204，实际 HTTP {status}"
+assert os.path.isfile(os.path.join(user_dir, "verify-system", "app", "index.html")), \
+    "保存后用户层该出现该胶囊的目录（父目录要自动建出来）"
+status, body, _ = call(fx_data)
+assert status == 200 and body == fx_before, \
+    f"没写过的出厂数据该继续从内置层读到：HTTP {status} {body[:60]!r}"
+status, _, _ = call(fx_data, method="PUT", data=b'{"user":1}\n', headers={"Content-Type": "application/json"})
+assert status == 204, f"沙盒写入内置胶囊的数据该落用户层：HTTP {status}"
+status, body, _ = call(fx_data)
+assert status == 200 and body == b'{"user":1}\n', f"写入后该读用户层：HTTP {status} {body[:60]!r}"
+status, _, _ = call(fx_data, method="DELETE")
+assert status == 204, f"删除用户层数据该 204：HTTP {status}"
+assert open(fx_sys_data, "rb").read() == fx_before, "出厂数据被删/被改了（删除只该动用户层）"
+status, body, _ = call(fx_data)
+assert status == 200 and body == fx_before, \
+    f"删掉用户副本后该回落到出厂数据：HTTP {status} {body[:60]!r}"
+print("PASS 内置胶囊出厂数据：入口复制后仍可读、写入/删除只动用户层、出厂文件始终不变")
 CAPASSERT
 stop_backend || fail "内置胶囊层后端没停下来"
+rm -rf "$SYSTEM_FIXTURE"
 SYSTEM_CAPS_DIR="/nonexistent"
 
 say "4/4 热启动（同一份代码第二次跑，进程刚退出）"

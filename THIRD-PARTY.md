@@ -37,6 +37,19 @@ These are bundled into `web/dist` and therefore shipped with the GUI. All are MI
 
 No web fonts, icon fonts, analytics, or remote UI assets are loaded.
 
+## Bundled capsules
+
+The read-only system capsule layer ships single-file HTML apps. `hello` is built in this repository;
+`tiddlywiki.html` is fetched from the upstream official site at build time
+(`scripts/build-capsules.sh`, `https://tiddlywiki.com/empty.html`) and is not modified.
+
+| Capsule | Upstream | License | Usage |
+| --- | --- | --- | --- |
+| [TiddlyWiki](https://tiddlywiki.com/) | official `empty.html` release | BSD-3-Clause | bundled personal wiki capsule (saves copy-on-write into the user library) |
+
+TiddlyWiki's copyright and license text is embedded in the shipped file itself
+(`$:/core/copyright.txt`), so the attribution travels with the artifact.
+
 ## Runtime dependencies (desktop shell)
 
 The Rust dependencies are compiled into the `.app`; versions are pinned in

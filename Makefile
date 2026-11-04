@@ -15,11 +15,12 @@
 #   make smoke            真实 Chrome 端到端冒烟（需要先 make web）
 #   make verify-cli       三面对账：MCP tools/list + CLI --json ≡ HTTP body（需后端在跑）
 #   make verify-plugins   外置插件机制：示例插件装入 → 三面 + 格子桥自动出现、disabled 全消失（自起测试后端）
+#   make verify-tiddlywiki 随包 TiddlyWiki 自动保存：真 Chrome 新建 tiddler → 自动 PUT → 用户层副本（自起测试后端）
 #   make dashboard        一条命令起完整信息墙（构建前端 → uv run yhub gui）
 #
 # 目标平台目前只有 macOS（Tauri 壳）。Windows/Linux 见 docs/packaging.md。
 
-.PHONY: open-app dev-plugin capsules verify-versions wheel publish install-backend verify-backend verify-cli verify-i18n verify-plugins verify-settings verify-edit-mode web app install install-hooks uninstall-hooks verify-app smoke dashboard plugin-list help
+.PHONY: open-app dev-plugin capsules verify-versions wheel publish install-backend verify-backend verify-cli verify-i18n verify-plugins verify-tiddlywiki verify-settings verify-edit-mode web app install install-hooks uninstall-hooks verify-app smoke dashboard plugin-list help
 
 help:
 	@sed -n '2,20p' Makefile | sed 's/^# \{0,1\}//'
@@ -75,6 +76,10 @@ verify-i18n:
 verify-plugins:
 	uv run python scripts/verify-plugin-install.py
 	cd web && node verify-plugins.mjs
+
+# 随包 TiddlyWiki 的自动保存（真 Chrome + 真 PUT）：自己拉临时配置的测试后端
+verify-tiddlywiki:
+	cd web && node verify-tiddlywiki-save.mjs
 
 verify-settings:
 	./tauri/scripts/verify-settings-parity.sh

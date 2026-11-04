@@ -65,11 +65,11 @@ EN = {
         "Changing files in the library is not allowed from this origin"
     ),
     "capsules.system_layer_read_only": (
-        "This is the bundled example that ships with the software; it is read-only"
+        "Saving a bundled capsule failed: the software-owned copy cannot be written and your library "
+        "could not be created"
     ),
     "capsules.system_layer_read_only_hint": (
-        "Point capsules_dir at a writable directory in Settings; or copy this capsule into your "
-        "library and you can save in place"
+        "Check that capsules_dir points at a writable directory (Settings → capsules), then save again"
     ),
     # Size / count limits (413)
     "capsules.file_too_large": "Content exceeds the per-file limit of {limit} MiB",
@@ -140,9 +140,9 @@ ZH = {
     "capsules.not_found": "没有这个胶囊：{path}",
     "capsules.write_origin_forbidden": "不允许的来源写回库里的文件",
     "capsules.delete_origin_forbidden": "不允许的来源改动库里的文件",
-    "capsules.system_layer_read_only": "这是随软件分发的内置示例，只读",
+    "capsules.system_layer_read_only": "内置胶囊保存失败：随包文件不能改，用户库也没能建出来",
     "capsules.system_layer_read_only_hint": (
-        "在「配置」里把 capsules_dir 指向一个可写目录；或把该胶囊复制到你的库后就能就地保存"
+        "检查「配置」里的 capsules_dir 是否指向一个可写目录，然后重试保存"
     ),
     "capsules.file_too_large": "内容超出单文件上限 {limit} MiB",
     "capsules.sandbox_file_too_large_hint": "沙盒文件按单文件保存；太大就该拆开或者换个存法",

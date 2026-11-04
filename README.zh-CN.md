@@ -13,7 +13,7 @@ yhub/server/mcp_server.py  同一套适配器走 MCP（stdio）
 yhub/cli/                  宿主命令 + 由适配器声明生成的 CLI
 web/                       Vite + React + TS 界面：启动器、工作台、设置、信息墙
 tauri/                     macOS 桌面壳：托盘、全局热键、无边框窗（不含 Python）
-capsules/                  随包分发的示例单文件 HTML 应用
+capsules/                  随包分发的单文件 HTML 胶囊（构建产物 + TiddlyWiki）
 ```
 
 - 能力写在 `yhub/server/adapters/`，界面只负责显示。
@@ -55,7 +55,7 @@ MCP 客户端接入：
 ## 扩展点
 
 1. **适配器** — 新增 `yhub/server/adapters/<id>.py` 并导出 `TOOL_META`（`faces.routes` / `faces.mcp` / `faces.cli`，信息墙格子另加 `presentation.tiles`），其它文件不用动。
-2. **胶囊** — 把 `settings.json: capsules_dir` 指向一个放单文件 HTML 的目录：每个文件按 `/capsules/<path>` 托管，`PUT` 即存回磁盘。见 [`docs/capsules.md`](https://github.com/yhub-labs/yhub/blob/main/docs/capsules.md)。
+2. **胶囊** — 单文件 HTML 应用，按 `/capsules/<path>` 托管，`PUT` 即存回磁盘。TiddlyWiki 随包自带（打包时从官网下载）；内置胶囊第一次保存会落成用户库副本，升级永远不会覆盖你的编辑。见 [`docs/capsules.md`](https://github.com/yhub-labs/yhub/blob/main/docs/capsules.md)。
 3. **插件** — 第三方适配器，用 `yhub plugin install <id | owner/repo | path>` 装进配置根目录，不随本仓库分发。registry 格式见 [`examples/registry.example.json`](https://github.com/yhub-labs/yhub/blob/main/examples/registry.example.json)，约定见 [`docs/plugins.md`](https://github.com/yhub-labs/yhub/blob/main/docs/plugins.md)。
 
 ## 验收

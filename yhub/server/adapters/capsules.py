@@ -18,9 +18,11 @@ Contract
   * `HEAD    /capsules/<path>`        same headers as GET, no body (to fetch `ETag`)
   * `OPTIONS /capsules/<path>`        200 + `DAV: 1` (tells single-file capsules this server takes
     PUT; sandbox paths are answered too, even before the file exists)
-  * `PUT     /capsules/<path>`        entry html: full overwrite of the existing file (**never
-    creates**); sandbox path: create/store a data file (**may create**, parents auto-created);
-    204 + new `ETag`
+  * `PUT     /capsules/<path>`        entry html: full overwrite of the file that was served (**never
+    creates** a new capsule); a **built-in** (system layer) entry is materialized into the writable
+    user library under the same relative path on its first save (copy-on-write: the software owns
+    the shipped file and upgrades replace it, the user's edits shadow it from then on); sandbox
+    path: create/store a data file (**may create**, parents auto-created); 204 + new `ETag`
   * `DELETE  /capsules/<path>`        delete one sandbox data file (204); the entry html is always 405
   * `POST    /api/capsules/ensure`    prepare a writable capsule library: mkdir -p + write `capsules_dir`
   * `If-Match` mismatch → 412 (someone else just saved; never overwrite silently) · over 32 MiB →
@@ -719,42 +721,45 @@ def _user_capsules_dir_auto() -> Path:
     return rec.resolve()
 
 
-def _sandbox_resolve(relpath: str) -> tuple[Path, Path] | None:
-    """Locate a sandbox path:
-    1. prefer a sandbox in the user library;
-    2. otherwise, if it matches a built-in capsule's sandbox:
-       - map the data file into the user directory (code stays read-only so it upgrades with the
-         software; data persists in the user library);
-       - reads prefer data the user has written, falling back to the built-in defaults;
-       - writes always land in the user directory.
+def _sandbox_resolve(relpath: str, *, write: bool = False) -> tuple[Path, Path] | None:
+    """Locate a sandbox path (data files inside a capsule's own folder).
+
+    Reads (`write=False`) prefer data the user has written and fall back to the shipped default;
+    **writes always land in the user library** (`write=True`), so a read-only layer is never touched.
+    Both layers are always searched: a built-in capsule's *entry* may have been copied into the user
+    library by its first save, and then the user folder owns the capsule while data files it never
+    wrote still read from the shipped defaults.
     """
-    # 1. Look in the user layer first
+    user_root: Path | None = None
     user = capsules_dir()
     if user is not None and user.is_dir():
         user_root = user.resolve()
-        hit = _sandbox(user_root, relpath)
-        if hit is not None:
-            return hit
-
-    # 2. Does it match a built-in capsule's sandbox?
     sys_root = system_capsules_dir()
-    if sys_root is not None and sys_root.is_dir():
-        sys_hit = _sandbox(sys_root.resolve(), relpath)
-        if sys_hit is not None:
-            user_root = _user_capsules_dir_auto()
-            top_name = sys_hit[0].name
-            user_cand = user_root / top_name
-            user_file = user_root.joinpath(*Path(relpath).parts)
-            # The user has already written this data file → read user data
-            if user_file.is_file():
-                return user_cand, user_file
-            # Not written by the user but shipped as default → read the built-in default
-            if sys_hit[1].is_file():
-                return sys_hit[0], sys_hit[1]
-            # A new write → the target lands in the user directory
-            return user_cand, user_file
+    sys_hit = _sandbox(sys_root.resolve(), relpath) if sys_root is not None and sys_root.is_dir() else None
 
-    return None
+    user_hit = _sandbox(user_root, relpath) if user_root is not None else None
+    if user_hit is not None:
+        # Writes, or a data file the user already wrote: the user copy is the answer.
+        if write or user_hit[1].is_file() or sys_hit is None:
+            return user_hit
+        # The user folder owns this capsule but this data file was never written: keep reading the
+        # shipped default instead of pretending the file vanished.
+        if sys_hit[1].is_file():
+            return sys_hit
+        return user_hit
+
+    if sys_hit is None:
+        return None
+    # Built-in capsule: data is mapped into the user directory (code stays read-only and upgrades
+    # with the software; data persists in the user library).
+    user_root = _user_capsules_dir_auto()
+    user_cand = user_root / sys_hit[0].name
+    user_file = user_root.joinpath(*Path(relpath).parts)
+    if write or user_file.is_file():
+        return user_cand, user_file
+    if sys_hit[1].is_file():
+        return sys_hit
+    return user_cand, user_file
 
 
 
@@ -871,7 +876,12 @@ def _scope_denied(request: Request, relpath: str, scope: str | None) -> bool:
         ref_rel = _referer_relpath(request)
         if ref_rel is None:
             return False  # main UI / another site: an ordinary navigation into the capsule
-        return _scope_key(ref_rel) != scope
+        ref_scope = _scope_key(ref_rel)
+        # A Referer under /capsules/ that resolves to nothing (the capsule was deleted or renamed, or
+        # the lookup raced a layer change) is not evidence of *another* capsule: only a different
+        # *resolved* capsule is refused. Treating None as a mismatch made a capsule's own HEAD /
+        # OPTIONS intermittently 403 right after its first save landed in the user layer.
+        return ref_scope is not None and ref_scope != scope
     mode = (request.headers.get("sec-fetch-mode") or "").lower()
     dest = (request.headers.get("sec-fetch-dest") or "").lower()
     if mode != "navigate":
@@ -1280,7 +1290,13 @@ async def put_capsule(relpath: str, request: Request) -> Response:
     """Overwrite one capsule in place (idempotent): 204 / 404 unknown / 412 stale / 413 too big / 403 cross-origin.
 
     Two paths with deliberately different semantics:
-      * **entry html** (`_resolve` hit): write back only, never create — the TiddlyWiki semantics, untouched;
+      * **entry html** (`_resolve` hit): write back only, never create a new capsule — the TiddlyWiki
+        semantics, untouched. A built-in (system layer) entry is read-only on disk, so the save is
+        **materialized into the writable user library** under the same relative path and shadows the
+        shipped file from then on (the same copy-on-write rule `_sandbox_resolve` already applies to
+        built-in capsules' data). That is what makes a bundled TiddlyWiki actually save: upgrading the
+        software replaces the shipped copy, never the user's edits. Only when the user library cannot
+        be created (permissions) does the save fail with 403 `system_layer_read_only`.
       * **sandbox path** (inside a capsule folder): may **create**, auto-creates parent dirs, and a
         per-sandbox file cap applies. Multi-file capsules (e.g. `data/chat/*.json`) persist
         their data through this path.
@@ -1303,16 +1319,23 @@ async def put_capsule(relpath: str, request: Request) -> Response:
     file = _resolve(relpath)
 
     if file is not None:
+        # How is this entry resolved, and may we write it in place? An entry in a read-only layer
+        # (the bundled capsules that ship with the software) is copied into the user library on its
+        # first save instead of being refused: `ETag` stays the served content's (the client's
+        # `If-Match` is checked against what it actually read), while the bytes land in the user layer.
+        source = file
         writable = False
+        layer_root: Path | None = None
         for _name, root, is_writable in capsule_roots():
             try:
                 file.relative_to(root)
-                writable = is_writable
-                break
             except ValueError:
                 continue
+            layer_root, writable = root, is_writable
+            break
         if not writable:
-            return Response(
+            # No owning layer (cannot happen for a resolved file) or the built-in layer: copy-on-write.
+            read_only = Response(
                 status_code=403,
                 content=json.dumps(
                     {
@@ -1324,10 +1347,21 @@ async def put_capsule(relpath: str, request: Request) -> Response:
                 ),
                 media_type="application/json",
             )
+            try:
+                if layer_root is None:
+                    raise OSError("no owning capsule root")
+                user_root = _user_capsules_dir_auto()
+                file = user_root / file.relative_to(layer_root)
+                if not _inside(user_root, file):
+                    return _not_found(relpath)
+                # A directory capsule's entry lives one level down: the copy needs that folder.
+                file.parent.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                return read_only
 
     if file is None:
         # ---- Sandbox write: create/store a data file inside the capsule's own folder ----
-        hit = _sandbox_resolve(relpath)
+        hit = _sandbox_resolve(relpath, write=True)
         if hit is None:
             return _not_found(relpath)
         sandbox_root, target = hit
@@ -1410,8 +1444,8 @@ async def put_capsule(relpath: str, request: Request) -> Response:
         _write_atomic(target, body)
         return Response(status_code=204, headers={"ETag": _etag(body)})
 
-    # ---- Entry html: write back (never create) ----
-    current = _etag(file.read_bytes())
+    # ---- Entry html: write back (never create a new capsule) ----
+    current = _etag(source.read_bytes())
     conflict = _refuse(relpath, request.headers.get("if-match"), current)
     if conflict is not None:
         return conflict
@@ -1471,7 +1505,7 @@ def delete_capsule(relpath: str, request: Request) -> Response:
             ),
             media_type="application/json",
         )
-    hit = _sandbox_resolve(relpath)
+    hit = _sandbox_resolve(relpath, write=True)
     if hit is None or not hit[1].is_file():
         return _not_found(relpath)
     try:
