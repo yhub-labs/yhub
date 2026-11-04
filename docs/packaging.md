@@ -97,6 +97,41 @@ make install ARGS="--no-restart"
 
 `bundle.macOS.signingIdentity = "Y-Hub Local Dev"` (self-signed cert in the login keychain). An ad-hoc signature changes identity on every rebuild and invalidates the macOS local-network permission, so it must stay `certificate root`. `NSLocalNetworkUsageDescription` in `tauri/Info.plist` only declares eligibility — tick Y-Hub under System Settings → Privacy → Local Network after installing; changing the bundle id or certificate restarts that grant. Shipping to others needs Developer ID + notarization (every embedded Mach-O re-signed; today only the shell).
 
+## Publishing the macOS shell
+
+`.github/workflows/release-app.yml` attaches the shell to every GitHub Release: `Y-Hub_<version>_aarch64.dmg` plus its `.sha256`. It is a **separate workflow from the PyPI publish** on purpose — macOS runners queue for tens of minutes at a time (observed), and a stuck shell build must not delay or fail the package upload. Failures here are visible on the release but do not touch PyPI.
+
+**The artifact is ad-hoc signed, not notarized**, so Gatekeeper blocks the first launch:
+
+```
+"Y-Hub" is damaged and can't be opened. You should move it to the Trash.
+```
+
+That message is Gatekeeper's generic response to an un-notarized bundle, not a corrupt download — check the `.sha256` against the release before doing anything. To open it anyway: right-click the app → *Open* → *Open*, or `xattr -dr com.apple.quarantine /Applications/Y-Hub.app` once. CI cannot do better than this: a distributed build needs an Apple **Developer ID Application** certificate from the paid program ($99/year), and without one there is nothing to notarize.
+
+Why ad-hoc and not unsigned: on Apple Silicon every executable must carry at least an ad-hoc signature, so `signingIdentity: "-"` is the minimum that runs. The repository's `Y-Hub Local Dev` identity is a self-signed certificate that exists only on the author's machine — CI overrides it with `--config '{"bundle":{"macOS":{"signingIdentity":"-"}}}'`.
+
+**The dmg contains no Python.** The shell is thin: at launch it reuses a backend on 8790, or starts the `yhub` installed on the machine (`uv tool install yhub`). Without a backend it shows the install hint from `tauri/src/backend.rs` rather than pretending to work. Say so in the release notes; a dmg on its own is not an installation.
+
+Builds are **arm64 only** (`macos-14` runner). For Intel or a universal build, add the second target and let Tauri merge them:
+
+```bash
+rustup target add x86_64-apple-darwin
+cd tauri && npx tauri build --target universal-apple-darwin --bundles dmg
+```
+
+Roughly doubles build time and produces `Y-Hub_<version>_universal.dmg`.
+
+### Making it Gatekeeper-clean (needs the paid Apple program)
+
+1. Create a **Developer ID Application** certificate; export it as `.p12` and store it base64 in `APPLE_CERTIFICATE` with `APPLE_CERTIFICATE_PASSWORD`.
+2. Add `APPLE_ID`, `APPLE_TEAM_ID` and an app-specific password in `APPLE_APP_SPECIFIC_PASSWORD`.
+3. Drop the `signingIdentity: "-"` override: Tauri signs with the imported identity and notarizes automatically when those variables are present (it logs `skipping app notarization` today because they are not).
+4. Add a hardened-runtime entitlement for the local backend connection (`com.apple.security.network.client`) — the shell talks to `127.0.0.1:8790`; without it the connection is denied on notarized builds.
+5. Notarization takes minutes and is asynchronous: `xcrun notarytool submit --wait` then `xcrun stapler staple` on the dmg, otherwise the ticket only rides along on the first online launch.
+
+Until then the honest position is: **source + wheel are the supported install; the dmg is a convenience with a documented Gatekeeper step.**
+
 ## Verification
 
 | Command | Verifies |

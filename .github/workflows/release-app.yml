@@ -1,0 +1,93 @@
+name: release-app
+
+# 把 macOS 壳（Tauri）打进 Release 附件。
+#
+# 刻意和 `release.yml`（PyPI）分开：macOS runner 经常排队（2026-11 实测卡过 20 分钟以上），
+# 一个卡住的壳构建不能把 Python 包的上传一起拖死。所以这里是独立工作流，失败不影响发版。
+#
+# 签名策略：**ad-hoc**（`signingIdentity: "-"`）。仓库里那个 "Y-Hub Local Dev" 是我本机的
+# 自签证书，CI 上没有；而 arm64 的二进制至少要被签一次才能跑，所以不能省掉签名这一步。
+# ad-hoc 签名不等于可分发签名：用户第一次打开会被 Gatekeeper 拦，需要右键 → 打开（或者
+# `xattr -dr com.apple.quarantine`）。详见 docs/packaging.md。
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "已存在的 Release tag（例如 v0.1.1），把 dmg 补挂上去"
+        required: true
+        type: string
+
+permissions:
+  contents: write # gh release upload
+
+concurrency:
+  group: release-app-${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  dmg:
+    runs-on: macos-14 # arm64；Intel 需要另加 x86_64 target（见 docs/packaging.md）
+    env:
+      TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tauri
+
+      - name: 版本一致性
+        run: ./scripts/check-versions.sh
+
+      - name: tag 与 __version__ 一致
+        run: |
+          tag="${TAG#v}"
+          ver="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' yhub/__init__.py)"
+          if [ "$tag" != "$ver" ]; then
+            echo "::error::tag ${TAG} 与 __version__ ${ver} 不一致 —— dmg 里的壳会和包对不上"
+            exit 1
+          fi
+          echo "tag ${TAG} = __version__ ${ver}"
+
+      - name: 前端依赖
+        working-directory: web
+        run: npm ci
+
+      - name: 构建 dmg（ad-hoc 签名）
+        # CI=true 让 Tauri 跳过 DMG 的 Finder 排版（那一步要 AppleScript 权限，本机跑都会失败）
+        run: |
+          cd tauri
+          CI=true npx tauri build --bundles dmg \
+            --config '{"bundle":{"macOS":{"signingIdentity":"-"}}}'
+
+      - name: 核对产物（签名 + 里面确实是这个版本）
+        run: |
+          APP="tauri/target/release/bundle/macos/Y-Hub.app"
+          DMG="$(ls tauri/target/release/bundle/dmg/*.dmg)"
+          codesign --verify --deep --strict "$APP"
+          codesign -dv --verbose=2 "$APP" 2>&1 | grep -q "Signature=adhoc" \
+            || { echo "::error::壳不是 ad-hoc 签名，用户机器上会被拦得更奇怪"; exit 1; }
+          test "$(defaults read "$PWD/$APP/Contents/Info.plist" CFBundleShortVersionString)" = "${TAG#v}" \
+            || { echo "::error::Info.plist 版本与 tag 不一致"; exit 1; }
+          shasum -a 256 "$DMG" | awk '{print $1}' > "$DMG.sha256"
+          echo "== $DMG"
+          ls -lh "$DMG"
+
+      - name: 挂到 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$TAG" tauri/target/release/bundle/dmg/*.dmg \
+            tauri/target/release/bundle/dmg/*.dmg.sha256 --clobber
