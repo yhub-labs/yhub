@@ -39,7 +39,9 @@ jobs:
         if: github.event_name == 'release'
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          ver="$(uv run python -c 'import yhub; print(yhub.__version__)')"
+          # 直接从源码读：这里 `uv run` 会先把项目打包成可编辑安装，而 hatchling 需要
+          # `web/dist`（npm ci 还没跑），构建失败会让这一步莫名其妙地红。
+          ver="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' yhub/__init__.py)"
           if [ "$tag" != "$ver" ]; then
             echo "::error::release tag ${GITHUB_REF_NAME} 与 __version__ ${ver} 不一致"
             exit 1
@@ -53,8 +55,8 @@ jobs:
       - name: 产物自检（twine + 内容 + 链接）
         run: |
           rm -f dist/.gitignore
-          uv run --with twine twine check dist/*.whl
-          uv run python - <<'PY'
+          uvx twine check dist/*.whl
+          python3 - <<'PY'
           import glob, re, zipfile
           wheel = glob.glob("dist/*.whl")[0]
           archive = zipfile.ZipFile(wheel)
