@@ -44,10 +44,10 @@ for (const key of ['YHUB_CONFIG_DIR', 'YHUB_SETTINGS_FILE']) {
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const PLUGIN_ID = 'example-plugin'
 const SRC = join(REPO, 'web', 'fixtures', PLUGIN_ID)
-const PLUGINS_ROOT = join(homedir(), '.config', 'yhub', 'plugins')
+const PLUGINS_ROOT = join(homedir(), '.yhub', 'plugins')
 const TARGET = join(PLUGINS_ROOT, PLUGIN_ID)
 // 基线期把本机装着的第三方插件整个挪到这里（同一个「不能留在 plugins/ 里」的理由）
-const PARK_ROOT = join(homedir(), '.config', 'yhub', '.pre-verify-parked')
+const PARK_ROOT = join(homedir(), '.yhub', '.pre-verify-parked')
 // 示例插件声明的两格（读 manifest 现算，别在这里手写第二份）
 const manifestSrc = JSON.parse(readFileSync(join(SRC, 'plugin.json'), 'utf8'))
 const EXAMPLE_TILES = manifestSrc.presentation.tiles.map((t) => t.id)
