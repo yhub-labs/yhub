@@ -30,7 +30,7 @@ EN = {
         "tray.{field} has the wrong type (expected {expected}); using the default"
     ),
     "settings.tray_not_object": "tray is not an object; using the default",
-    "settings.capsules_dir_not_string": "capsules_dir is not a string; using the default",
+    "settings.capsules_dir_not_string": "capsules_dir is not a string; using the default location",
     "settings.capsules_disabled_not_string_list": (
         "capsules_disabled is not a list of strings; using the default"
     ),
@@ -54,8 +54,10 @@ EN = {
     # _dir_path / _check_bool / _check_enum
     "settings.dir_requires_string": "{label} must be a string path",
     "settings.dir_requires_string_hint": (
-        "for example /Users/you/Y-Hub/capsules or ~/Y-Hub/capsules; empty = disabled"
+        "for example ~/.yhub/capsules or ~/Y-Hub/capsules; empty = the default location "
+        "(turn the library off with capsules_enabled)"
     ),
+    "settings.capsules_enabled_not_bool": "capsules_enabled is not a boolean; using the default (on)",
     "settings.dir_requires_absolute": (
         "{label} must be an absolute path (or start with ~/); got {value}"
     ),
@@ -169,7 +171,10 @@ ZH = {
     "settings.quarantine_backed_up": "{path} {why}，已备份为 {backup}，本次按默认值运行",
     "settings.quarantine_backup_failed": "{path} {why}，且备份失败（{error}），本次按默认值运行",
     "settings.dir_requires_string": "{label} 要填字符串路径",
-    "settings.dir_requires_string_hint": "比如 /Users/you/Y-Hub/capsules 或 ~/Y-Hub/capsules；留空 = 关闭",
+    "settings.dir_requires_string_hint": (
+        "比如 ~/.yhub/capsules 或 ~/Y-Hub/capsules；留空 = 用默认位置（要关掉用 capsules_enabled）"
+    ),
+    "settings.capsules_enabled_not_bool": "capsules_enabled 不是布尔值，已用默认值（开启）",
     "settings.dir_requires_absolute": "{label} 要用绝对路径（或 ~/ 开头），现在是 {value}",
     "settings.dir_requires_absolute_hint": "相对路径说不清是相对谁——后端进程的工作目录不是你能预期的那个",
     "settings.bool_required": "{label} 要填 true / false",

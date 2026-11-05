@@ -4,14 +4,30 @@ Capability-style module: it declares only `ROUTES` and takes no launcher tool en
 
 In one line: `settings.json: capsules_dir` points at a directory in your library and **every
 `.html` / `.htm` file inside is a capsule** — drop one in and it appears, delete it and it is gone.
-No import step, no id, no allowlist, no manifest.
+No id, no allowlist, no manifest gating what counts.
+
+**Import is an optional front door, not a gate** (2026-11): `POST /api/capsules/import` copies one
+file into the same library (zero configuration — it creates the directory and stores `capsules_dir`)
+and `capsules.json` in the config root carries a *declared* name / icon / description / order per
+capsule. The file stays the truth: the overlay only decorates what the scan found, a capsule whose
+file is gone simply stops being listed, and dropping a file in by hand keeps working exactly as
+before (see `_capsules_import`).
 
 Contract
 
   * `GET     /api/capsules`           list scanned capsules as JSON; each item carries an openable
     `url`, the user-facing tri-state `configured` / `problem`, `recommended_dir` (UI guidance) and
     the bookmark-style trio `title` / `icon` / `description` scraped from the file head like a
-    browser bookmark — empty string when the file does not define them (see "Bookmark metadata")
+    browser bookmark — empty string when the file does not define them (see "Bookmark metadata").
+    A declared overlay wins over the scraped value; the raw declared fields are echoed in `meta`
+    and `stale_metadata` counts overlay entries whose file disappeared
+  * `POST    /api/capsules/import`    copy one `.html`/`.htm` into the user library (`{"path"}` from
+    the desktop picker, `{"filename", "content"}` from a plain browser, optional `{"meta"}`);
+    creates the library on first use, never requires configuration
+  * `POST    /api/capsules/meta`      declare name / icon / description / order for one capsule
+    (stored in `capsules.json`, keyed by relpath); `null` clears a field, `{"reset": true}` the entry
+  * `POST    /api/capsules/delete`    remove one **user-layer** capsule (`{"relpath", "remove_data"?}`);
+    a bundled capsule is refused with a hint to disable it instead
   * `GET     /capsules/<path>`        serve the entry html verbatim (`text/html; charset=utf-8`,
     `no-store` + `ETag`); when no entry resolves, read **sandbox** data files from the capsule's own
     folder (Content-Type guessed from the suffix, no CSP — that is not a page)
@@ -84,14 +100,15 @@ put in your own library**, on loopback only, equivalent to opening a local HTML 
     the desktop shell's native origin); hence `capsules_dir` should only point inside your library
   * renaming changes the URL and old references 404 — the price of zero registration
 
-Users: `web/src/components/Config.tsx` (the "capsules in your library" section lists them and offers
-"open in browser"; the desktop shell goes through the `open_capsule` command, the browser just opens
-the URL).
+Users: `web/src/components/settings/CapsulesSection.tsx` (the "capsules in your library" section lists
+them, offers "open in browser", imports/edits/deletes through the `/api/capsules/*` endpoints above;
+the desktop shell goes through the `open_capsule` command for the browser preview).
 """
 
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import html as html_lib
 import json
@@ -119,10 +136,6 @@ _APP_SUFFIXES = (".html", ".htm")
 MAX_APPS = 200
 # Per-file cap: PUT rewrites the whole file, so larger content needs a different storage route.
 MAX_BYTES = 32 * 1024 * 1024
-# Suggested user library location. Only the default for "create it for me" and a UI hint — it is
-# **never created automatically**: installing must not write into the user's home directory, so it
-# only materializes when the user asks for it.
-RECOMMENDED_DIR = "~/Y-Hub/capsules"
 
 # Origin allowlist for PUT: any local port + the Tauri shell's native origin.
 _ORIGIN_LOCAL = re.compile(r"^https?://([a-z0-9-]+\.)?(127\.0\.0\.1|localhost)(:\d+)?$")
@@ -343,45 +356,74 @@ def _extract_meta(path: Path, root: Path, mtime_ns: int, size: int) -> dict[str,
     return meta
 
 
-def capsules_dir() -> Path | None:
-    """The "capsules in your library" directory (`settings.json: capsules_dir`, `~/` expanded).
-    None when unset or not a directory.
+#: Name of the default user library inside the config root (`<config root>/capsules`).
+#: Why inside the config root: it is a directory the app owns, it follows `YHUB_CONFIG_DIR` (tests,
+#: power users) and it moves together with the rest of the data root, so nothing about it has to be
+#: configured or migrated by hand. A user who wants the library elsewhere sets `capsules_dir`.
+DEFAULT_LIBRARY_NAME = "capsules"
 
-    Reads through the **single** config entry point (`yhub/server/adapters/settings.py`), so shell, web
-    and CLI edits take effect immediately without a restart. **A missing directory counts as
-    unconfigured** — a typo'd name simply lists nothing.
-    """
+
+def default_capsules_dir() -> Path:
+    """Where the user library lives unless `capsules_dir` overrides it (created on first import/save)."""
+    from .settings import config_dir  # lazy: avoid a cycle during package init
+
+    return config_dir() / DEFAULT_LIBRARY_NAME
+
+
+def capsules_enabled() -> bool:
+    """`settings.json: capsules_enabled` — the explicit on/off switch for the user layer (default on)."""
+    settings, _warnings = read_settings()
+    return bool(settings.get("capsules_enabled", True))
+
+
+def configured_capsules_dir() -> tuple[str, Path]:
+    """`(raw value, effective path)`: a raw `""` means "the default location", not "off"."""
     settings, _warnings = read_settings()
     raw = str(settings.get("capsules_dir") or "").strip()
-    if not raw:
+    return raw, (Path(raw).expanduser() if raw else default_capsules_dir())
+
+
+def capsules_dir() -> Path | None:
+    """The "capsules in your library" directory, `~/` expanded. None when the layer is off or absent.
+
+    Reads through the **single** config entry point (`yhub/server/adapters/settings.py`), so shell, web
+    and CLI edits take effect immediately without a restart. An empty `capsules_dir` means the default
+    location; a missing directory lists nothing (and `dir_state()` says why).
+    """
+    if not capsules_enabled():
         return None
-    base = Path(raw).expanduser()
+    _raw, base = configured_capsules_dir()
     return base if base.is_dir() else None
 
 
 def dir_state() -> dict[str, Any]:
-    """User-facing tri-state: `unset` (built-in layer only) / `ok` / a specific problem.
+    """User-facing guide state: `disabled` / `ok` / `missing` / `not_dir` / `unwritable` (+ extras).
 
-    Why a separate function: `capsules_dir()` folds "unset", "missing" and "not a directory" into
-    None, so the UI could not tell "you haven't configured it" from "you configured it wrong" — and
-    those two need completely different guidance.
+    Why a separate function: `capsules_dir()` folds "off", "missing" and "not a directory" into None,
+    so the UI could not tell "you turned it off" from "the path is wrong" — and those two need
+    completely different guidance. The default location not existing yet is **not** a problem: it is
+    created on the first import or save, so a fresh install is already in the "ok" state.
     """
-    settings, _warnings = read_settings()
-    raw = str(settings.get("capsules_dir") or "").strip()
-    if not raw:
-        return {"configured": False, "path": "", "problem": "unset", "detail": ""}
-    base = Path(raw).expanduser()
+    raw, base = configured_capsules_dir()
+    using_default = not raw
+    exists = base.is_dir()
+    common = {"path": str(base), "using_default": using_default, "exists": exists}
+    if not capsules_enabled():
+        return {**common, "configured": False, "problem": "disabled",
+                "detail": tr("capsules.dir_detail_disabled")}
     if not base.exists():
-        return {"configured": False, "path": str(base), "problem": "missing",
+        if using_default:
+            return {**common, "configured": True, "problem": None, "detail": ""}
+        return {**common, "configured": False, "problem": "missing",
                 "detail": tr("capsules.dir_detail_missing")}
-    if not base.is_dir():
-        return {"configured": False, "path": str(base), "problem": "not_dir",
+    if not exists:
+        return {**common, "configured": False, "problem": "not_dir",
                 "detail": tr("capsules.dir_detail_not_dir")}
     if not os.access(base, os.W_OK):
         # Directory exists but is not writable: still list its content, only saving will fail
-        return {"configured": True, "path": str(base), "problem": "unwritable",
+        return {**common, "configured": True, "problem": "unwritable",
                 "detail": tr("capsules.dir_detail_unwritable")}
-    return {"configured": True, "path": str(base), "problem": None, "detail": ""}
+    return {**common, "configured": True, "problem": None, "detail": ""}
 
 
 def _display_path(base: Path) -> str:
@@ -394,11 +436,12 @@ def _display_path(base: Path) -> str:
 
 
 async def ensure_capsules_dir(request: Request) -> dict[str, Any]:
-    """Prepare a writable capsule library: mkdir -p + write `capsules_dir`, returning the effective value.
+    """Prepare a writable capsule library: mkdir -p (+ turn the layer on), returning the effective value.
 
-    Defaults to `RECOMMENDED_DIR`; both UI buttons ("use the recommended location" / "create this
-    directory") hit it. Filesystem work stays host-side (the UI never touches fs) and the config
-    write reuses `settings.set_values` (the single entry point).
+    With no `path` this prepares the **default location** and clears any override (`capsules_dir: ""`)
+    instead of pinning today's absolute path — the library then follows the data root. With a `path`
+    it becomes the explicit override. Filesystem work stays host-side (the UI never touches fs) and the
+    config write reuses `settings.set_values` (the single entry point).
     """
     payload: dict[str, Any] = {}
     try:
@@ -410,8 +453,8 @@ async def ensure_capsules_dir(request: Request) -> dict[str, Any]:
     except (ValueError, UnicodeDecodeError):
         payload = {}
 
-    wanted = str(payload.get("path") or RECOMMENDED_DIR).strip()
-    base = Path(wanted).expanduser()
+    wanted = str(payload.get("path") or "").strip()
+    base = Path(wanted).expanduser() if wanted else default_capsules_dir()
     if not (wanted.startswith("/") or wanted.startswith("~/")):
         raise ToolError(
             tr("capsules.dir_absolute_required", path=repr(wanted)),
@@ -439,10 +482,14 @@ async def ensure_capsules_dir(request: Request) -> dict[str, Any]:
             hint=tr("capsules.dir_not_writable_hint"),
         )
 
-    stored = _display_path(base)
-    set_values({"capsules_dir": stored})
+    try:
+        using_default = base.resolve() == default_capsules_dir().resolve()
+    except OSError:
+        using_default = False
+    stored = "" if using_default else _display_path(base)
+    set_values({"capsules_dir": stored, "capsules_enabled": True})
     return {"ok": True, "capsules_dir": str(base), "stored": stored, "created": created,
-            "recommended": stored == RECOMMENDED_DIR}
+            "recommended": using_default, "using_default": using_default}
 
 
 def system_capsules_dir() -> Path | None:
@@ -555,9 +602,14 @@ def _canonical_url_path(relpath: str) -> str:
 
 
 def _inside(root: Path, candidate: Path) -> bool:
-    """Is the real path still inside the hosted root (blocks symlinks pointing outside)?"""
+    """Is the real path still inside the hosted root (blocks symlinks pointing outside)?
+
+    Both sides are resolved: comparing a resolved candidate against an unresolved root is a silent
+    "no" on macOS, where `/tmp` is a symlink to `/private/tmp` (callers normally pass an already
+    resolved root, so this only fixes the latent asymmetry).
+    """
     try:
-        candidate.resolve().relative_to(root)
+        candidate.resolve().relative_to(root.resolve())
     except (OSError, ValueError):
         return False
     return True
@@ -711,14 +763,29 @@ def _sandbox(root: Path, relpath: str) -> tuple[Path, Path] | None:
 
 
 def _user_capsules_dir_auto() -> Path:
-    """Get or auto-create the writable user capsule root (default ~/Y-Hub/capsules)."""
+    """The writable user library, created on demand (this is the zero-configuration path).
+
+    Deliberately does **not** write the resulting path into `capsules_dir`: `""` already means "the
+    default location", and pinning today's absolute path into the config would freeze it — a later
+    relocation of the data root would leave the library behind. Only an explicit override is stored.
+    """
     user = capsules_dir()
     if user is not None and user.is_dir():
         return user.resolve()
-    rec = Path(RECOMMENDED_DIR).expanduser()
-    rec.mkdir(parents=True, exist_ok=True)
-    set_values({"capsules_dir": _display_path(rec)})
-    return rec.resolve()
+    if not capsules_enabled():
+        raise ToolError(
+            tr("capsules.library_disabled"),
+            hint=tr("capsules.library_disabled_hint"),
+        )
+    _raw, base = configured_capsules_dir()
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ToolError(
+            tr("capsules.dir_create_failed", error=exc),
+            hint=tr("capsules.dir_create_failed_hint"),
+        ) from exc
+    return base.resolve()
 
 
 def _sandbox_resolve(relpath: str, *, write: bool = False) -> tuple[Path, Path] | None:
@@ -958,10 +1025,12 @@ def scan_capsules() -> list[dict[str, Any]]:
     **Why scan the directory instead of maintaining an import list**: a list has to be maintained by
     the UI — an import dialog, IPC, an allowlist, an id→file derivation — just to answer "which files
     count". "Every `.html` in the directory is a capsule" needs no registration at all: the file goes
-    in and appears, gets deleted and disappears. The allowlist disappears with it and path traversal
-    has nothing to traverse (lookups stay inside the root and the real path must still be inside).
+    in and appears, gets deleted and disappears. The import endpoint added in 2026-11 does not change
+    that: it writes a file into the same tree, and the overlay in `capsules.json` only *decorates*
+    what this scan found (see `_capsules_import`).
 
-    Each entry carries `url_path`: the shortest readable URL (the explicit path on collision).
+    Each entry carries `url_path`: the shortest readable URL (the explicit path on collision), and
+    `meta`: the declared overlay fields (empty when the capsule was never imported/edited).
     """
     roots = capsule_roots()
     if not roots:
@@ -1023,6 +1092,12 @@ def scan_capsules() -> list[dict[str, Any]]:
             item["url_path"] = item["relpath"]
         else:
             taken[short] = item["relpath"]
+    # Declared metadata wins over the scraped trio, and `order` decides the list order (the launcher
+    # and the wall both render this array as-is). A missing overlay leaves the scraped values alone.
+    from . import _capsules_import as meta_store
+
+    meta_store.apply_overlay(out)
+    out.sort(key=meta_store.sort_key)
     return out
 
 
@@ -1047,8 +1122,12 @@ def list_capsules(request: Request) -> dict[str, Any]:
     overrides = settings.get("capsules_subdomains_overrides") or {}
     if not isinstance(overrides, dict):
         overrides = {}
+    from . import _capsules_import as meta_store
+
+    scanned = scan_capsules()
+    stale = max(0, len(meta_store.read_meta()) - sum(1 for app in scanned if app.get("meta")))
     items = []
-    for app in scan_capsules():
+    for app in scanned:
         scope = _scope_key(app["relpath"]) or app["relpath"]
         isolated = bool(overrides[scope]) if scope in overrides else global_sub
         url = (
@@ -1069,14 +1148,24 @@ def list_capsules(request: Request) -> dict[str, Any]:
         "capsule_roots": roots,
         "max_capsules": MAX_APPS,
         "max_bytes": MAX_BYTES,
+        # How many declared overlay entries no longer decorate anything (their file is gone). The
+        # manifest is pruned on the next metadata write; the UI only needs to say so.
+        "stale_metadata": stale,
         "capsules_subdomains": global_sub,
         "capsules_subdomains_overrides": dict(overrides),
-        # onboarding: tri-state + recommended location (the UI renders "unset / misconfigured / ok" from it)
+        # Guide state: disabled / ok / missing / not_dir / unwritable, plus where the library lives.
+        # `capsules_enabled` is the explicit on/off switch; an empty `capsules_dir` means the default
+        # location (created on first import/save), which is why a fresh install is already usable.
         "configured": state["configured"],
         "problem": state["problem"],
         "problem_detail": state["detail"],
         "configured_path": state["path"],
-        "recommended_dir": RECOMMENDED_DIR,
+        "capsules_enabled": capsules_enabled(),
+        "capsules_dir_exists": bool(state.get("exists")),
+        "using_default": bool(state.get("using_default")),
+        "default_capsules_dir": _display_path(default_capsules_dir()),
+        # kept for older clients: the default location is the recommended one
+        "recommended_dir": _display_path(default_capsules_dir()),
     }
 
 
@@ -1559,6 +1648,142 @@ async def toggle_capsule(request: Request) -> dict[str, Any]:
     return {"ok": True, "id": target_id, "enabled": enabled, "capsules_disabled": dis}
 
 
+# ----------------------------------------- Import / declared metadata / library delete
+#
+# The optional front door. `scan_capsules()` still decides what exists (a file in the library), so
+# these three endpoints write a file, decorate one, or remove one — none of them can make a capsule
+# appear that is not on disk, and none of them is required for a capsule to work.
+
+
+def _origin_forbidden(message: str) -> Response:
+    """403 in the same JSON envelope every other write uses (the loopback server has no auth)."""
+    return Response(
+        status_code=403,
+        content=json.dumps({"ok": False, "error": message}, ensure_ascii=False),
+        media_type="application/json",
+    )
+
+
+async def _json_object(request: Request) -> dict[str, Any]:
+    """Request body → object; empty body = {}; anything else → the shared readable error."""
+    raw = await request.body()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise ToolError(
+            tr("capsules.body_must_be_object"),
+            hint=tr("capsules.body_must_be_object_hint"),
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise ToolError(
+            tr("capsules.body_must_be_object"),
+            hint=tr("capsules.body_must_be_object_hint"),
+        )
+    return parsed
+
+
+async def import_capsule(request: Request) -> dict[str, Any]:
+    """`POST /api/capsules/import` — copy one capsule into the user library (the import front door).
+
+    Two transports, one writer: the desktop shell hands over `{"path"}`, a plain browser hands over
+    `{"filename", "content"}` (no filesystem access there). Either way the bytes land in the library
+    as one `.html`/`.htm` file, and the next `GET /api/capsules` sees it through the normal scan —
+    import is a convenience in front of "drop the file in", never a replacement for it.
+
+    The library is created on demand, so this is also the zero-configuration path: a machine that
+    never configured `capsules_dir` can import right away.
+    """
+    if not _origin_allowed(request):
+        return _origin_forbidden(tr("capsules.write_origin_forbidden"))
+    from . import _capsules_import as importer
+
+    payload = await _json_object(request)
+    meta = payload.get("meta")
+    if meta is not None and not isinstance(meta, dict):
+        raise ToolError(tr("capsules.meta_body_invalid"), hint=tr("capsules.meta_body_invalid_hint"))
+    replace = bool(payload.get("replace"))
+    path = str(payload.get("path") or "").strip()
+    if path:
+        result = importer.import_from_path(path, replace=replace, meta=meta)
+    else:
+        content_b64 = payload.get("content_base64")
+        content = payload.get("content")
+        if isinstance(content_b64, str) and content_b64:
+            # A browser reads the picked file as bytes (`<input type=file>` → ArrayBuffer → base64):
+            # the page may be gb18030 or have a BOM, and re-encoding it as JSON text would damage it.
+            try:
+                body = base64.b64decode(content_b64, validate=True)
+            except (binascii.Error, ValueError) as exc:
+                raise ToolError(
+                    tr("capsules.import_content_invalid", error=exc),
+                    hint=tr("capsules.import_content_invalid_hint"),
+                ) from exc
+        elif isinstance(content, str):
+            body = content.encode("utf-8")
+        else:
+            raise ToolError(
+                tr("capsules.import_body_missing"),
+                hint=tr("capsules.import_body_missing_hint"),
+            )
+        result = importer.import_entry(
+            filename=str(payload.get("filename") or "capsule.html"),
+            content=body,
+            replace=replace,
+            meta=meta,
+        )
+    entry = next((c for c in scan_capsules() if c["relpath"] == result["relpath"]), None)
+    return {**result, "capsule": entry}
+
+
+async def set_capsule_meta(request: Request) -> dict[str, Any]:
+    """`POST /api/capsules/meta` — declare name / icon / description / order for one capsule.
+
+    Stored in `capsules.json` (config root, keyed by relpath) and applied on top of whatever the file
+    head says. `{"field": null}` clears one field, `{"reset": true}` the whole entry; every field is
+    optional, so a capsule that was never imported keeps showing its scraped `<title>`.
+    """
+    if not _origin_allowed(request):
+        return _origin_forbidden(tr("capsules.write_origin_forbidden"))
+    from . import _capsules_import as meta_store
+
+    payload = await _json_object(request)
+    relpath = str(payload.get("relpath") or "").strip().strip("/")
+    if not relpath:
+        raise ToolError(tr("capsules.meta_missing_relpath"), hint=tr("capsules.meta_missing_relpath_hint"))
+    if _resolve(relpath) is None:
+        raise ToolError(
+            tr("capsules.not_found", path=relpath),
+            hint=tr("capsules.not_found_layers_hint", roots=", ".join(str(p) for _n, p, _w in capsule_roots())),
+        )
+    # Prune orphans in the same write: valid = everything the scan found, plus the target itself
+    # (a bundled capsule can be decorated too, and its relpath is exactly what the scan reports)
+    valid = {entry["relpath"] for entry in scan_capsules()}
+    valid.add(relpath)
+    stored = meta_store.set_meta(relpath, payload, valid=valid)
+    return {"ok": True, "relpath": relpath, "meta": stored}
+
+
+async def remove_capsule(request: Request) -> dict[str, Any]:
+    """`POST /api/capsules/delete` — delete one capsule from the user library.
+
+    The library owner's delete, distinct from the entry-path `DELETE` gate (a capsule may never
+    delete itself). A bundled (system-layer) capsule is refused with a hint to disable it: the
+    software owns that file and an upgrade replaces it. Directory capsules keep their data files
+    unless `remove_data` says otherwise.
+    """
+    if not _origin_allowed(request):
+        return _origin_forbidden(tr("capsules.delete_origin_forbidden"))
+    from . import _capsules_import as importer
+
+    payload = await _json_object(request)
+    relpath = str(payload.get("relpath") or "").strip()
+    if not relpath:
+        raise ToolError(tr("capsules.meta_missing_relpath"), hint=tr("capsules.meta_missing_relpath_hint"))
+    return importer.delete_entry(relpath, remove_data=bool(payload.get("remove_data")))
+
+
 # Capability-style routes: collected by adapters.discover_routes, registered by main.py (no launcher tool entry)
 ROUTES = [
     # JSON list (machine) — pages live at /capsules/* (humans / browsers); the split is deliberate
@@ -1566,6 +1791,10 @@ ROUTES = [
     # Prepare a writable capsule library (mkdir + config write); the UI never touches fs, all fs work stays host-side
     {"method": "POST", "path": "/api/capsules/ensure", "endpoint": ensure_capsules_dir},
     {"method": "POST", "path": "/api/capsules/toggle", "endpoint": toggle_capsule},
+    # Import + declared metadata + library delete (all optional: the scan alone still works)
+    {"method": "POST", "path": "/api/capsules/import", "endpoint": import_capsule},
+    {"method": "POST", "path": "/api/capsules/meta", "endpoint": set_capsule_meta},
+    {"method": "POST", "path": "/api/capsules/delete", "endpoint": remove_capsule},
     # Pages: the URL path is the path relative to capsules_dir (with the completion rules above);
     # unresolvable paths fall through to the sandbox (data files inside a capsule folder)
     {"method": "GET", "path": "/capsules/{relpath:path}", "endpoint": get_capsule},

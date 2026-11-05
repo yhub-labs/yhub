@@ -412,22 +412,10 @@ export default function Launcher({
                     <span className="text-sm font-semibold text-neutral-400">
                       {item.title.slice(0, 1).toUpperCase()}
                     </span>
-                  ) : item.type === 'vault_capsule' && item.iconSrc ? (
-                    // Bookmark-style icon; on load failure fall back in place to the capsule icon (hide the image, keep the glyph)
-                    <>
-                      <img
-                        src={item.iconSrc}
-                        alt=""
-                        className="w-5 h-5 object-contain"
-                        onError={(ev) => {
-                          ev.currentTarget.style.display = 'none'
-                          ev.currentTarget.nextElementSibling?.classList.remove('hidden')
-                        }}
-                      />
-                      <span className="hidden">
-                        <Icon name="capsule" size={16} />
-                      </span>
-                    </>
+                  ) : item.type === 'vault_capsule' ? (
+                    // Bookmark-style icon (data: / https:) or a declared emoji label; ToolIcon draws
+                    // both and falls back to the capsule glyph when an image fails to load.
+                    <ToolIcon icon={item.iconSrc || item.icon} fallback="capsule" size={16} />
                   ) : (
                     <ToolIcon icon={item.icon} fallback="plugin" size={16} />
                   )}

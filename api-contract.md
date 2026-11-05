@@ -1,7 +1,7 @@
 # The Y-Hub three-face contract (HTTP / MCP / CLI)
 
 Every external interface comes from one declaration: `TOOL_META` in `yhub/server/adapters/<id>.py`
-(built-in) or `~/.config/yhub/plugins/<id>/plugin.json` (third-party). Routes, MCP tools, CLI
+(built-in) or `~/.yhub/plugins/<id>/plugin.json` (third-party). Routes, MCP tools, CLI
 commands and dashboard cells are generated from it; adding a tool never edits `yhub/server/main.py`.
 
 ## 1. Three faces, one declaration
@@ -74,10 +74,11 @@ declaration's `ready`/`status` resolve per request.
 
 ## 6. Settings (`settings.py`)
 
-File `~/.config/yhub/settings.json` (`YHUB_CONFIG_DIR` / `YHUB_SETTINGS_FILE` override for tests). Keys:
+File `~/.yhub/settings.json` (`YHUB_CONFIG_DIR` / `YHUB_SETTINGS_FILE` override for tests). Keys:
 `version`, `hotkeys.{toggle_panel,show_panel,hide_panel}`,
-`tray.{close_behavior,left_click,double_click,show_on_start,show_notifications}`, `capsules_dir`,
-`capsules_disabled`, `capsules_subdomains`, `capsules_subdomains_overrides`, `plugins_registry_url`, `plugins_marketplace`,
+`tray.{close_behavior,left_click,double_click,show_on_start,show_notifications}`, `capsules_dir` (empty = the
+default location `<config root>/capsules`), `capsules_enabled`, `capsules_disabled`, `capsules_subdomains`,
+`capsules_subdomains_overrides`, `plugins_registry_url`, `plugins_marketplace`,
 `ui_language`, `plugins` — the dotted paths `tauri/src/config.rs` uses.
 
 | Method | Path | Input | Response |
@@ -93,7 +94,7 @@ everything first and write atomically — one bad item writes nothing.
 ## 7. Plugins (`plugin_config.py`)
 
 Core plugins are the built-in adapters (`rclone`, `rss`, `scheduler`); everything else lives in
-`~/.config/yhub/plugins/<id>/`. Counts always follow what is installed.
+`~/.yhub/plugins/<id>/`. Counts always follow what is installed.
 
 | Method | Path | Input | Response |
 |---|---|---|---|
@@ -136,20 +137,27 @@ every non-`ok`/non-fresh cell; credentials never reach a response (userinfo stri
 strings from `source`). A `fetch(specs) -> {cell_id: result}` returns
 `{"ok":true,"status","summary","detail","updated_at"}` or `{"ok":false,"error":{"message","hint"}}`;
 a malformed result downgrades only that cell. Groups share one cache entry (TTL = `refresh`,
-single-flight, serve-stale-on-error). `~/.config/yhub/dashboard.json` overrides `enabled`, `zone`,
+single-flight, serve-stale-on-error). `~/.yhub/dashboard.json` overrides `enabled`, `zone`,
 `order`, `title`, `href`, `stale_after`, `critical` and any declared `params` key per cell; invalid
 values fall back.
 
 ## 9. Capsules (`capsules.py`)
 
 `settings.json: capsules_dir` holds single-file HTML apps (plus the bundled read-only `system` layer).
-Every `.html`/`.htm` is a capsule; no manifest, no import step.
+Every `.html`/`.htm` is a capsule — the scan is the only truth. `POST /api/capsules/import` is an
+optional front door that copies a file in, and `capsules.json` (config root, keyed by relpath) only
+**decorates** what the scan found (`title` / `icon` / `description` / `order`); it can never add, hide
+or resurrect a capsule, and a declared entry whose file is gone is reported as `stale_metadata` and
+pruned on the next metadata write.
 
 | Method | Path | Input | Response |
 |---|---|---|---|
-| GET | `/api/capsules` | — | `{"ok","capsules":[{"id","relpath","name","path","source","writable","enabled","url_path","bytes","mtime","title","icon","description","scope","subdomains","url"}],"capsules_dir","system_capsules_dir","capsule_roots","max_capsules","max_bytes","configured","problem","problem_detail","configured_path","recommended_dir"}` |
-| POST | `/api/capsules/ensure` | `{"path"?}` (absolute or `~/…`, default `~/Y-Hub/capsules`) | `{"ok","capsules_dir","stored","created","recommended"}` (mkdir -p + writes the key) |
+| GET | `/api/capsules` | — | `{"ok","capsules":[{"id","relpath","name","path","source","writable","enabled","url_path","bytes","mtime","title","icon","description","meta","scope","subdomains","url"}],"capsules_dir","system_capsules_dir","capsule_roots","max_capsules","max_bytes","stale_metadata","configured","problem","problem_detail","configured_path","capsules_enabled","capsules_dir_exists","using_default","default_capsules_dir","recommended_dir"}` (`problem`: `disabled`/`missing`/`not_dir`/`unwritable`/null; a missing default location is `null`) |
+| POST | `/api/capsules/ensure` | `{"path"?}` (absolute or `~/…`; omitted = the default location, which also clears any override) | `{"ok","capsules_dir","stored","created","recommended","using_default"}` (mkdir -p + turns `capsules_enabled` on) |
 | POST | `/api/capsules/toggle` | `{"id"}` or `{"source","relpath"}`, `enabled` | `{"ok","id","enabled","capsules_disabled"}` |
+| POST | `/api/capsules/import` | `{"path"}` **or** `{"filename","content"}` / `{"filename","content_base64"}`, optional `replace`, `meta` | `{"ok","relpath","path","capsules_dir","bytes","replaced","unchanged"?,"capsule"}` (creates the library on demand) |
+| POST | `/api/capsules/meta` | `{"relpath","title"?,"icon"?,"description"?,"order"?, "reset"?}` (`null` clears a field) | `{"ok","relpath","meta"}` — 400 for an invalid value (nothing written) or an unknown capsule |
+| POST | `/api/capsules/delete` | `{"relpath","remove_data"?}` | `{"ok","relpath","removed":[…] ,"kept_data"}` — user layer only; a bundled capsule → 400 with "disable it instead" |
 | GET/HEAD/OPTIONS/PUT/DELETE | `/capsules/{relpath:path}` | — | page or sandbox data file (see below) |
 
 Pages: `GET` returns the entry html verbatim (`no-store`, `ETag`, capsule CSP with `'unsafe-eval'`);
@@ -166,7 +174,7 @@ permission bits. Isolation has two layers: the per-capsule CSP and the `Referer`
 
 ## 10. Scheduler (`scheduler.py`)
 
-Jobs live in `~/.config/yhub/schedule.json` (hand-edited: `{"enabled","tick_seconds","jobs":[…]}`,
+Jobs live in `~/.yhub/schedule.json` (hand-edited: `{"enabled","tick_seconds","jobs":[…]}`,
 `command` as an argv array, `schedule` = `{"every","at"}` or `{"cron"}`, `timeout_seconds` ≤ 3600).
 
 | Method | Path | Input | Response |
@@ -185,7 +193,7 @@ Each job also produces the cell `cron.<id>`.
 
 ## 11. RSS (`rss.py`)
 
-Feeds live in `~/.config/yhub/rss.json`; one feed = one cell `rss.<id>`.
+Feeds live in `~/.yhub/rss.json`; one feed = one cell `rss.<id>`.
 
 | Method | Path | Input | Response |
 |---|---|---|---|

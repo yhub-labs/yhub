@@ -522,7 +522,7 @@ export const api = {
       { method: 'POST' },
       { timeoutMs: 3_600_000 },
     ),
-  /* RSS feeds: one feed per wall cell (add/edit/delete all write ~/.config/yhub/rss.json) */
+  /* RSS feeds: one feed per wall cell (add/edit/delete all write ~/.yhub/rss.json) */
   rssList: (live = true) =>
     request<RssList>(`/api/rss?live=${live ? 'true' : 'false'}`, {}, { timeoutMs: 30_000 }),
   // fetching waits on the origin, so allow time (the backend caps each feed at 6s, sources run in
@@ -583,13 +583,24 @@ export const api = {
 
 /**
  * "Capsules in your library": every .html / .htm in one library directory (`capsules_dir`) is a
- * capsule — put the file in and it appears, delete it and it disappears; there is no import
- * manifest (contract in docs/config.md).
+ * capsule — put the file in and it appears, delete it and it disappears. The file remains the truth;
+ * `capsules.json` (backend-side) only *decorates* what the scan found, and `import` is an optional
+ * front door that copies a file in (see `importCapsule`).
  *
  * Addresses come from the backend (the frontend never builds port or route shapes itself): `url`
  * is the shortest readable form, e.g. `http://127.0.0.1:8790/capsules/pinyin` — suffix completion
  * and directory-index detection both happen in the backend.
  */
+/** Declared metadata for one capsule (the `capsules.json` overlay; every field optional) */
+export type CapsuleMeta = {
+  title?: string
+  /** emoji / short label / https: URL / inlined `data:image/…` */
+  icon?: string
+  description?: string
+  /** list order: lower shows first (the launcher / wall render the API order as-is) */
+  order?: number
+}
+
 export type VaultCapsule = {
   /** capsule identity (directory-relative path or single file name): referenced by per-capsule settings */
   scope?: string
@@ -620,6 +631,9 @@ export type VaultCapsule = {
   title?: string
   icon?: string
   description?: string
+  /** raw declared fields from the overlay (empty when this capsule was never imported/edited): the
+   * editor uses it to tell an override from a scraped value */
+  meta?: CapsuleMeta
   /** which layer: user (your own library) | system (built-in examples shipped with the package) */
   source?: 'user' | 'system'
   /** whether that layer is writable (always false for the built-in layer: its first save is copied
@@ -633,22 +647,46 @@ export type VaultCapsule = {
 
 export type VaultCapsules = {
   capsules: VaultCapsule[]
-  /** the capsule directory the backend actually uses (set only when the config is valid and the directory really exists) */
+  /** the capsule directory the backend actually uses (set only when the enabled layer really exists) */
   capsules_dir: string
-  /** three-state user-layer directory (drives UI guidance): unset / ok / configured but broken */
+  /** guide state (drives the UI): disabled / ok / configured but broken */
   configured: boolean
-  problem: 'unset' | 'missing' | 'not_dir' | 'unwritable' | null
+  problem: 'disabled' | 'missing' | 'not_dir' | 'unwritable' | null
   problem_detail: string
-  /** path as written in the config (shown even when the directory is missing, to aid diagnosis) */
+  /** the effective path (the explicit override, or the default location) — shown even when missing */
   configured_path: string
-  /** recommended location (the default for "create it for me"; never created automatically) */
+  /** explicit on/off switch (`settings.capsules_enabled`); default on */
+  capsules_enabled?: boolean
+  /** whether the directory exists yet: the default location is created on the first import/save */
+  capsules_dir_exists?: boolean
+  /** `capsules_dir` is empty = the default location (not an override) */
+  using_default?: boolean
+  /** where the library lives when not overridden (`<data folder>/capsules`) */
+  default_capsules_dir?: string
+  /** the default location (kept for older clients: same value as `default_capsules_dir`) */
   recommended_dir: string
   max_capsules: number
   max_bytes: number
+  /** overlay entries whose file is gone (the manifest is pruned on the next metadata write) */
+  stale_metadata?: number
   /** whether per-capsule isolated origins are enabled (the global default) */
   capsules_subdomains?: boolean
   /** per-capsule overrides */
   capsules_subdomains_overrides?: Record<string, boolean>
+}
+
+/** Result of `POST /api/capsules/import`: the copy landed in the user library (zero configuration)` */
+export type ImportCapsuleResult = {
+  ok: boolean
+  relpath: string
+  path: string
+  capsules_dir: string
+  bytes: number
+  /** an existing file was overwritten (`replace: true`) */
+  replaced: boolean
+  /** the picked file already lived in the library: only metadata was recorded, nothing was copied */
+  unchanged?: boolean
+  capsule?: VaultCapsule | null
 }
 
 /** Result of `POST /api/capsules/ensure`: create the directory + write the config (done host-side; the UI never touches the fs) */
@@ -673,9 +711,14 @@ export const capsules = {
       problem: data.problem ?? null,
       problem_detail: data.problem_detail ?? '',
       configured_path: data.configured_path ?? '',
-      recommended_dir: data.recommended_dir ?? '~/Y-Hub/capsules',
+      capsules_enabled: data.capsules_enabled ?? true,
+      capsules_dir_exists: data.capsules_dir_exists ?? false,
+      using_default: data.using_default ?? true,
+      default_capsules_dir: data.default_capsules_dir ?? data.recommended_dir ?? '',
+      recommended_dir: data.recommended_dir ?? '',
       max_capsules: data.max_capsules ?? 0,
       max_bytes: data.max_bytes ?? 0,
+      stale_metadata: data.stale_metadata ?? 0,
     }
   },
 
@@ -692,6 +735,52 @@ export const capsules = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
+  /**
+   * Import one capsule into the user library. Two transports, one backend writer:
+   *   * desktop / anything with a path → `{ path }` (the shell's picker returns a real path)
+   *   * plain browser (no fs access) → `{ filename, content }` read through `<input type=file>`
+   * The library is created on demand, so importing needs no configuration first.
+   */
+  importCapsule: (payload: {
+    path?: string
+    filename?: string
+    content?: string
+    /** bytes as base64 (what a browser file picker produces); preferred over `content` so a
+     * gb18030 page or a BOM is not damaged by a round trip through JSON text */
+    content_base64?: string
+    replace?: boolean
+    meta?: CapsuleMeta
+  }): Promise<ImportCapsuleResult> =>
+    request<ImportCapsuleResult>(
+      '/api/capsules/import',
+      { method: 'POST', body: JSON.stringify(payload) },
+      { timeoutMs: 120_000 },
+    ),
+
+  /** declare name / icon / description / order for one capsule (`null` clears a field, `reset` the entry) */
+  setMeta: (payload: {
+    relpath: string
+    reset?: boolean
+    title?: string | null
+    icon?: string | null
+    description?: string | null
+    order?: number | null
+  }): Promise<{ ok: boolean; relpath: string; meta: CapsuleMeta }> =>
+    request<{ ok: boolean; relpath: string; meta: CapsuleMeta }>('/api/capsules/meta', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  /** delete one capsule from the user library (a bundled capsule is refused: disable it instead) */
+  remove: (payload: {
+    relpath: string
+    remove_data?: boolean
+  }): Promise<{ ok: boolean; relpath: string; removed: string[]; kept_data: boolean }> =>
+    request<{ ok: boolean; relpath: string; removed: string[]; kept_data: boolean }>(
+      '/api/capsules/delete',
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
 }
 
 /**

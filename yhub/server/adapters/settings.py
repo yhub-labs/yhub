@@ -1,4 +1,4 @@
-"""Read/write capability for the settings file (`~/.config/yhub/settings.json`): CLI and web can write too.
+"""Read/write capability for the settings file (`~/.yhub/settings.json`): CLI and web can write too.
 
 The desktop shell, the web UI and the CLI all read and write this file; read/write semantics live
 here and the UIs only display.
@@ -55,6 +55,11 @@ SETTINGS_FILE = "settings.json"
 ENV_SETTINGS_FILE = "YHUB_SETTINGS_FILE"
 ENV_CONFIG_DIR = "YHUB_CONFIG_DIR"
 
+#: The whole user-data root: settings, state files, plugins, logs and the default capsule library.
+#: Hidden on purpose (a dot directory is the app's own data, not the user's content), and it is the
+#: **only** place Y-Hub writes outside `capsules_dir`.
+CONFIG_DIR_NAME = ".yhub"
+
 DEFAULT_HOTKEY = "Option+Space"
 
 # Bindable hotkey actions: id / UI name / default combo (empty = unbound by default)
@@ -87,7 +92,14 @@ DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/yhub-labs/yhub-plugins
 
 TOP_DEFAULTS: dict[str, Any] = {
     "version": SETTINGS_VERSION,
+    # "" = the default location (`<config root>/capsules`, created on first import/save). Empty is
+    # **not** "off": `capsules_enabled` owns that switch (the same split as plugins_registry_url /
+    # plugins_marketplace — an empty path was the default value of every settings file ever written,
+    # so it cannot also mean "disabled").
     "capsules_dir": "",
+    # User capsule library on/off. Default on: the library is just a directory the app owns, so
+    # "there is nothing to configure" is the normal state, and turning it off is the explicit act.
+    "capsules_enabled": True,
     "capsules_disabled": [],
     # Per-capsule origin (<slug>.localhost:8790): off by default, keeping the current 127.0.0.1 addresses.
     "capsules_subdomains": False,
@@ -162,8 +174,18 @@ _NAMED_KEYS = {
 # --------------------------------------------------------- config dir and file
 
 
+def default_config_dir(home: Path | None = None) -> Path:
+    """The default user-data root (`~/.yhub`); pure — no environment, no I/O."""
+    return (home or Path.home()) / CONFIG_DIR_NAME
+
+
 def config_dir() -> Path:
-    """Same fallbacks as the shell: parent of `YHUB_SETTINGS_FILE` > `YHUB_CONFIG_DIR` > ~/.config/yhub"""
+    """Same fallbacks as the shell: parent of `YHUB_SETTINGS_FILE` > `YHUB_CONFIG_DIR` > ~/.yhub.
+
+    No migration of the old `~/.config/yhub` root: the project has no users to carry over yet, so a
+    second code path that copies directories around on first start would be pure risk (and an explicit
+    override must never trigger filesystem work either).
+    """
     explicit = os.environ.get(ENV_SETTINGS_FILE, "").strip()
     if explicit:
         parent = Path(explicit).expanduser().parent
@@ -172,7 +194,7 @@ def config_dir() -> Path:
     raw = os.environ.get(ENV_CONFIG_DIR, "").strip()
     if raw:
         return Path(raw).expanduser()
-    return Path.home() / ".config" / "yhub"
+    return default_config_dir()
 
 
 def settings_path() -> Path:
@@ -200,6 +222,7 @@ def known_keys() -> list[str]:
     keys.append("tray")
     keys += [f"tray.{f}" for f in TRAY_FIELDS]
     keys.append("capsules_dir")
+    keys.append("capsules_enabled")
     keys.append("capsules_disabled")
     keys.append("capsules_subdomains")
     keys.append("capsules_subdomains_overrides")
@@ -220,6 +243,7 @@ def defaults() -> dict[str, Any]:
         "hotkeys": {a["id"]: a["default_combo"] for a in HOTKEY_ACTIONS},
         "tray": dict(TRAY_DEFAULTS),
         "capsules_dir": "",
+        "capsules_enabled": True,
         "capsules_disabled": [],
         "capsules_subdomains": False,
         "capsules_subdomains_overrides": {},
@@ -289,6 +313,8 @@ def read_value(settings: dict[str, Any], key: str) -> Any:
         return settings["version"]
     if key == "capsules_dir":
         return settings[key]
+    if key == "capsules_enabled":
+        return bool(settings.get("capsules_enabled", True))
     if key == "capsules_disabled":
         val = settings.get("capsules_disabled")
         return list(val) if isinstance(val, list) else []
@@ -445,6 +471,12 @@ def _read_settings() -> tuple[dict[str, Any], list[str]]:
     elif capsules_dir is not None:
         warnings.append(tr("settings.capsules_dir_not_string"))
 
+    capsules_enabled = raw.get("capsules_enabled")
+    if isinstance(capsules_enabled, bool):
+        out["capsules_enabled"] = capsules_enabled
+    elif capsules_enabled is not None:
+        warnings.append(tr("settings.capsules_enabled_not_bool"))
+
     capsules_disabled = raw.get("capsules_disabled")
     if isinstance(capsules_disabled, list) and all(isinstance(x, str) for x in capsules_disabled):
         out["capsules_disabled"] = [x.strip() for x in capsules_disabled if x.strip()]
@@ -520,7 +552,11 @@ def _quarantine(path: Path, tag: str, why: str) -> str:
 
 
 def _dir_path(label: str, value: Any) -> str:
-    """Directory settings: absolute or `~/` prefixed; empty string disables the feature; trailing slashes stripped"""
+    """Directory settings: absolute or `~/` prefixed; trailing slashes stripped.
+
+    An empty string means "use the default location", never "off" — the on/off switch is a separate
+    boolean key (`capsules_enabled`), because "" was the default value every settings file carried.
+    """
     if not isinstance(value, str):
         raise ToolError(
             tr("settings.dir_requires_string", label=label),
@@ -653,6 +689,9 @@ def apply_value(settings: dict[str, Any], key: str, value: Any) -> dict[str, Any
         return settings
     if key == "capsules_dir":
         settings["capsules_dir"] = _dir_path("capsules_dir", value)
+        return settings
+    if key == "capsules_enabled":
+        settings["capsules_enabled"] = _check_bool("capsules_enabled", value)
         return settings
     if key == "capsules_disabled":
         if value is None:
@@ -893,6 +932,7 @@ def write_settings(settings: dict[str, Any], raw: dict[str, Any] | None = None) 
     merged["hotkeys"] = dict(settings["hotkeys"])
     merged["tray"] = dict(settings["tray"])
     merged["capsules_dir"] = settings["capsules_dir"]
+    merged["capsules_enabled"] = bool(settings.get("capsules_enabled", True))
     merged["capsules_disabled"] = list(settings.get("capsules_disabled", []))
     merged["capsules_subdomains"] = bool(settings.get("capsules_subdomains", False))
     merged["capsules_subdomains_overrides"] = dict(settings.get("capsules_subdomains_overrides", {}))
@@ -928,6 +968,7 @@ def set_values(pairs: dict[str, Any]) -> tuple[dict[str, Any], Path]:
         "hotkeys": dict(current["hotkeys"]),
         "tray": dict(current["tray"]),
         "capsules_dir": current["capsules_dir"],
+        "capsules_enabled": bool(current.get("capsules_enabled", True)),
         "capsules_disabled": list(current.get("capsules_disabled", [])),
         "capsules_subdomains": bool(current.get("capsules_subdomains", False)),
         "capsules_subdomains_overrides": dict(current.get("capsules_subdomains_overrides", {})),

@@ -1,6 +1,8 @@
 # Capsules in the library (`/capsules/<path>`)
 
-> `settings.json: capsules_dir` points at a directory in your library, and **every `.html` / `.htm` in it is a capsule** — drop one in and it appears, delete it and it disappears. No import, no id, no manifest, no allowlist.
+> `settings.json: capsules_dir` points at a directory in your library, and **every `.html` / `.htm` in it is a capsule** — drop one in and it appears, delete it and it disappears. No id, no allowlist: the file is the only truth about what exists.
+>
+> **Import is an optional front door, not a gate** (2026-11): `POST /api/capsules/import` copies one file into that same directory (creating it on first use, so nothing has to be configured first), and `POST /api/capsules/meta` stores a *declared* name / icon / description / order in `capsules.json`. The overlay only decorates what the scan found — the manifest can never add, hide or resurrect a capsule.
 
 This is the **hosting contract**. Implementation: `yhub/server/adapters/capsules.py` (a capability-only module: it declares `ROUTES` and takes no launcher entry). Config keys are owned by `yhub/server/adapters/settings.py`; see [config.md](config.md).
 
@@ -17,8 +19,10 @@ The system layer ships a small starter set: `hello` (built from `capsule-src/hel
 
 * The same relative path resolves **user first**; the system-layer file is shadowed, so upgrades never overwrite user edits.
 * A `PUT` on a system-layer entry is **copy-on-write**: the bytes are written to the user layer under the same relative path (creating parent directories, auto-creating `~/Y-Hub/capsules` when unset), and from then on the user copy is what the URL resolves to. The shipped file is never modified, so upgrading the software replaces the built-in original without touching the user's edits. The rule is layer-based, not capsule-specific: it applies to every bundled `.html`/`.htm` (loose file or directory capsule) with no name checks. Data files follow the same split: a shipped default keeps being read until the user writes that file, and writes/deletes always target the user layer. Sandbox data already behaves this way (writes always land in the user layer; reads prefer user data, then the shipped default). The save only fails with **403** when the user layer cannot be created (permissions).
-* `capsules_dir = ""` (or a directory that does not exist) turns the user layer off — `/capsules/*` then serves only built-in capsules. `GET /api/capsules` reports the tri-state via `configured` / `problem` (`unset` / `missing` / `not_dir` / `unwritable` / `null`) plus `recommended_dir`. `POST /api/capsules/ensure` with `{path?}` mkdirs (default `~/Y-Hub/capsules`) and writes the key through `set_values`.
-* Listing items: `relpath` / `name` / `path` / `url_path` / `url` / `bytes` / `mtime` / `source` / `writable` / `enabled` / `title` / `icon` / `description`, alongside `capsule_roots`, `max_capsules` (200), `max_bytes` (32 MiB). `POST /api/capsules/toggle` writes `capsules_disabled` (entries match `layer:relpath`, `relpath`, the top-level directory, or the bare name).
+* **Zero configuration (2026-11)**: `capsules_dir = ""` means the default location `<config root>/capsules`, and it is created on the first import or save. `/capsules/*` then serves that user layer plus the built-in one; there is nothing to set up before using capsules. `capsules_dir` is only an *override*; turning the user layer off is the separate `capsules_enabled: false` switch (built-in samples only). The default path is never written into `settings.json`, so moving the data root carries the library along.
+* `GET /api/capsules` reports the guide state via `configured` / `problem` (`disabled` / `missing` / `not_dir` / `unwritable` / `null`) plus `capsules_enabled`, `capsules_dir_exists`, `using_default`, `default_capsules_dir` (and `recommended_dir`, kept as an alias of the default). A default location that does not exist yet is **not** a problem — the next write creates it. `POST /api/capsules/ensure` with `{path?}` mkdirs and turns the layer on: no `path` prepares the default location and clears any override, a `path` becomes the explicit override.
+* Listing items: `relpath` / `name` / `path` / `url_path` / `url` / `bytes` / `mtime` / `source` / `writable` / `enabled` / `title` / `icon` / `description` / `meta`, alongside `capsule_roots`, `max_capsules` (200), `max_bytes` (32 MiB), `stale_metadata`. `POST /api/capsules/toggle` writes `capsules_disabled` (entries match `layer:relpath`, `relpath`, the top-level directory, or the bare name).
+* `POST /api/capsules/import` (`{path}` from the desktop picker, `{filename, content}` or `{filename, content_base64}` from a browser, optional `replace` / `meta`) writes **one file** into the user library and returns `{relpath, path, capsules_dir, bytes, replaced, unchanged?, capsule}`. `POST /api/capsules/meta` declares `title` / `icon` / `description` / `order` for one relpath (`null` clears a field, `{"reset": true}` the entry) and prunes orphans. `POST /api/capsules/delete` (`{relpath, remove_data?}`) removes a **user-layer** capsule; a bundled one is refused with a hint to disable it instead.
 
 ## 2. Address resolution and short URLs
 
@@ -78,6 +82,20 @@ The path needs at least two segments; `.` / `..` are rejected anywhere and a dot
 
 `title` (`<title>` → `og:title` → `application-name`), `icon` (largest `<link rel=icon sizes>`; `data:` / `https:` as-is, relative or root paths inlined as `data:` when ≤ 64 KiB per file and ≤ 96 KiB after encoding), `description` (`meta description` → `og:description`). Only the first 64 KiB of the file is read, decoded as utf-8 with a gb18030 retry, and cached by `(mtime_ns, size)`. Empty strings are honest: the display layer falls back to the file name / 💊.
 
+## 6b. Declared metadata and import (`capsules.json`)
+
+The file head is a *default*, not a contract: an author's `<title>` is often a version string, and a title-only file is common. Importing or editing a capsule declares the display data instead, in `capsules.json` beside `settings.json` (same config root, so `YHUB_CONFIG_DIR` moves both):
+
+```json
+{"version": 1, "capsules": {"hello/index.html": {"title": "Hello", "icon": "📄", "description": "…", "order": 10}}}
+```
+
+* **Key = relpath** (with no layer prefix): a bundled capsule that is edited stays the same entry when its first save copies it into the user layer, so the declared details survive.
+* **Every field is optional** and an empty field falls back to the scraped value (`null`/`""` clears one). `icon` accepts an emoji / short label, an `https:` URL or an inlined `data:image/…`; anything else (including `javascript:`) is a **400**, and a rejected write stores nothing.
+* **`order` sorts the list** (lower first, ties by relpath). That array is rendered as-is by the launcher and the wall, so ordering is the one field with an effect outside the display layer.
+* **The manifest follows the files**: an entry whose file is gone decorates nothing, is counted in `stale_metadata`, and is pruned by the next metadata write. Metadata can never make a capsule exist or disappear; a file dropped into the folder by hand still shows up immediately, just without declared details.
+* Import sanitizes the name to **one path segment** (`../evil/x.html` → `x.html`), keeps the `.html`/`.htm` suffix rule, refuses empty files and files over `MAX_BYTES`, and renames on collision (`x-2.html`) unless `replace` is set. A picked file that already lives in the library is **not** copied (`unchanged: true`): it is already a capsule, only its metadata is recorded. Importing creates the library on demand (`_user_capsules_dir_auto`) — that is the zero-configuration path: a machine that never configured anything can import right away, and a turned-off library answers 400 instead of silently creating one.
+
 ## 7. Verify
 
 ```bash
@@ -86,7 +104,7 @@ curl -s --noproxy '*' http://127.0.0.1:8790/api/capsules | python3 -m json.tool 
 curl -sI --noproxy '*' http://127.0.0.1:8790/capsules/<name>                     # no-store + ETag + per-capsule CSP
 curl -s -X OPTIONS -D - -o /dev/null --noproxy '*' http://127.0.0.1:8790/capsules/<name> | grep -i dav
 # PUT only against a throwaway library (YHUB_CONFIG_DIR + YHUB_SYSTEM_CAPSULES_DIR): it really rewrites the file
-make verify-backend                      # capsule listing, metadata, resolution, PUT codes, isolation, sandbox, lifecycle, bundled-capsule copy-on-write
+make verify-backend                      # capsule listing, scraped + declared metadata, import/delete, resolution, PUT codes, isolation, sandbox, lifecycle, bundled-capsule copy-on-write
 cd web && npm run build && npm run smoke  # launcher + settings UI; verify-settings-ui.mjs covers the shell side
 cd web && node verify-tiddlywiki-save.mjs # real Chrome: bundled TiddlyWiki autosave → user-layer copy (self-starts a temp backend)
 ```

@@ -82,7 +82,7 @@ export const en = {
   'settings.tray.window.description':
     'Close behavior, whether the panel pops up at launch, whether to send system notifications. Applies immediately — the config is re-read on every runtime event, no restart needed.',
   'settings.tray.window.footer':
-    'Settings live in the tray section of ~/.config/yhub/settings.json (see the General section). Illegal values are rejected by the backend together with the allowed ones, so the UI never writes a half-broken state.',
+    'Settings live in the tray section of ~/.yhub/settings.json (see the General section). Illegal values are rejected by the backend together with the allowed ones, so the UI never writes a half-broken state.',
   'settings.tray.preview.body':
     'Browser preview: only the current values are visible; change them on the desktop (the desktop App or',
   'settings.tray.preview.tail': ').',
@@ -129,14 +129,21 @@ export const en = {
   'settings.capsules.pickTitle': 'Choose your capsule library folder',
   'settings.capsules.path.aria': 'Capsule directory path',
   'settings.capsules.path.placeholder':
-    '~/Y-Hub/capsules (absolute path or starting with ~/; empty = built-in samples only)',
+    'Leave empty for the default location (or an absolute / ~/… path to override it)',
   'settings.capsules.path.save': 'Save',
   'settings.capsules.path.hint':
-    'A missing directory counts as “not configured” (you only see the built-in samples). For a ready-made writable directory use “Use the recommended location”.',
-  'settings.capsules.unset.title': 'No capsule library of your own yet',
-  'settings.capsules.unset.description':
-    'The built-in samples are playable right away. To host your own HTML, or to let capsules save data, you need a writable directory: the recommended one lives in your home folder, so it follows your backups and git.',
-  'settings.capsules.unset.useRecommended': 'Use the recommended location',
+    'Leave it empty and the library lives at the default location under the data folder (created on first use). An override must be absolute or start with ~/; a missing override shows up as “not configured”.',
+  'settings.capsules.disabled.title': 'Your own capsule library is turned off',
+  'settings.capsules.disabled.description':
+    'Only the built-in samples are listed right now. Turning it back on uses the default location (created on the first import) — no path to type, no folder to pick.',
+  'settings.capsules.disabled.enable': 'Turn it on (default location)',
+  'settings.capsules.defaultLocation': 'Default location: ',
+  'settings.capsules.defaultBadge': 'Default location',
+  'settings.capsules.defaultBadgeTitle':
+    'No override is set: the library follows the data folder, so it moves with your data and needs no configuration',
+  'settings.capsules.useDefault': 'Use default location',
+  'settings.capsules.createdOnFirstUse': ' · created on the first import or save',
+  'settings.capsules.notify.libraryOn': 'Capsule library on: {path} (created on the first import)',
   'settings.capsules.pick': 'Choose folder…',
   'settings.capsules.manual': 'Enter a path manually',
   'settings.capsules.unset.recommended': 'Recommended location: ',
@@ -162,6 +169,43 @@ export const en = {
   'settings.capsules.list.system': 'Built-in · data writable',
   'settings.capsules.list.userTitle': 'Lives in the user capsule directory, code and data are writable',
   'settings.capsules.list.user': 'User library',
+  'settings.capsules.list.custom': 'Customized',
+  'settings.capsules.list.customTitle':
+    'Name / icon / description / order are set in the capsule library; the page itself is unchanged',
+  'settings.capsules.import': 'Import capsule…',
+  'settings.capsules.importHint':
+    'Pick a .html / .htm file (or a folder with index.html) — it is copied into the library above and appears in the list. Dropping files into the folder by hand still works.',
+  'settings.capsules.importTooBig': 'That file is larger than the {limit} MiB limit for one capsule',
+  'settings.capsules.notify.imported': 'Imported “{name}”',
+  'settings.capsules.notify.importedReplaced': 'Replaced “{name}”',
+  'settings.capsules.notify.importedUnchanged':
+    '“{name}” was already in the library — only its details were saved',
+  'settings.capsules.notify.metaSaved': 'Saved details for “{name}”',
+  'settings.capsules.notify.metaReset': 'Details reset to what the page says for “{name}”',
+  'settings.capsules.notify.deleted': 'Deleted “{name}”',
+  'settings.capsules.notify.deletedKeptData':
+    'Deleted the entry for “{name}”; its data files are still in the folder',
+  'settings.capsules.stale':
+    '{count} saved capsule detail entries no longer match a file (the file was removed by hand?) — they are cleaned up on the next save.',
+  'settings.capsules.edit': 'Details',
+  'settings.capsules.editSave': 'Save',
+  'settings.capsules.editCancel': 'Cancel',
+  'settings.capsules.editReset': 'Reset to page values',
+  'settings.capsules.field.title': 'Display name',
+  'settings.capsules.field.titlePlaceholder': 'Empty = the page <title>, then the file name',
+  'settings.capsules.field.icon': 'Icon',
+  'settings.capsules.field.iconPlaceholder': '📄 or an https:// / data: image',
+  'settings.capsules.field.description': 'Description',
+  'settings.capsules.field.descriptionPlaceholder': 'One line shown under the name',
+  'settings.capsules.field.order': 'Order',
+  'settings.capsules.field.orderPlaceholder': 'e.g. 10',
+  'settings.capsules.field.orderInvalid': 'Order must be a whole number',
+  'settings.capsules.field.hint':
+    'These details live in the capsule library, not in the page: clearing a field falls back to what the page itself declares.',
+  'settings.capsules.delete': 'Delete…',
+  'settings.capsules.deleteConfirm': 'Delete capsule',
+  'settings.capsules.deleteConfirmHint': 'Removes the entry file from your library. Cannot be undone.',
+  'settings.capsules.deleteData': 'Also delete its data files',
   'settings.capsules.subdomain.label': 'Isolated origin',
   'settings.capsules.subdomain.title':
     'Isolated origin: this capsule uses <slug>.localhost, so its browser localStorage / window handles are separated from the main UI',
@@ -357,7 +401,7 @@ export const zhCN = {
   'settings.tray.window.description':
     '关窗行为、启动是否弹面板、要不要发系统通知。改完立刻生效——运行时每次事件都重新读配置，不用重启程序。',
   'settings.tray.window.footer':
-    '配置写在 ~/.config/yhub/settings.json 的 tray 段（见「通用」分区）。非法取值会被后端拒绝并提示可用值，界面不会写入半截状态。',
+    '配置写在 ~/.yhub/settings.json 的 tray 段（见「通用」分区）。非法取值会被后端拒绝并提示可用值，界面不会写入半截状态。',
   'settings.tray.preview.body':
     '当前是浏览器预览态：只能看到当前值，改动要在桌面端保存（桌面 App 或',
   'settings.tray.preview.tail': '）。',
@@ -402,15 +446,20 @@ export const zhCN = {
   'settings.capsules.notify.toggleOff': '胶囊「{name}」已停用',
   'settings.capsules.pickTitle': '选择你的胶囊库目录',
   'settings.capsules.path.aria': '胶囊目录路径',
-  'settings.capsules.path.placeholder':
-    '~/Y-Hub/capsules（绝对路径或 ~/ 开头，留空 = 只用内置示例）',
+  'settings.capsules.path.placeholder': '留空 = 默认位置（或填绝对路径 / ~/ 开头的覆盖路径）',
   'settings.capsules.path.save': '保存',
   'settings.capsules.path.hint':
-    '目录不存在时按「未配置」处理（只会看到内置示例）。想要现成的可写目录，用「使用推荐位置」。',
-  'settings.capsules.unset.title': '还没有自己的胶囊库',
-  'settings.capsules.unset.description':
-    '内置示例可以直接玩。想放自己的 HTML、或者让胶囊能保存数据，需要一个可写目录：推荐在主目录下建一个，跟着你的备份与 git 走。',
-  'settings.capsules.unset.useRecommended': '使用推荐位置',
+    '留空时胶囊库在数据目录下的默认位置（首次使用自动创建）；覆盖路径必须是绝对路径或 ~/ 开头。覆盖路径不存在会按「未配置」处理。',
+  'settings.capsules.disabled.title': '用户胶囊库已关闭',
+  'settings.capsules.disabled.description':
+    '现在只列内置示例。重新打开会用默认位置（首次导入时自动创建）——不用填路径，也不用选文件夹。',
+  'settings.capsules.disabled.enable': '打开（默认位置）',
+  'settings.capsules.defaultLocation': '默认位置：',
+  'settings.capsules.defaultBadge': '默认位置',
+  'settings.capsules.defaultBadgeTitle': '没有设置覆盖路径：胶囊库跟着数据目录走，不需要配置',
+  'settings.capsules.useDefault': '用默认位置',
+  'settings.capsules.createdOnFirstUse': ' · 首次导入或保存时创建',
+  'settings.capsules.notify.libraryOn': '胶囊库已打开：{path}（首次导入时自动创建）',
   'settings.capsules.pick': '选择文件夹…',
   'settings.capsules.manual': '手动填写路径',
   'settings.capsules.unset.recommended': '推荐位置：',
@@ -435,6 +484,40 @@ export const zhCN = {
   'settings.capsules.list.system': '内置 · 数据可写',
   'settings.capsules.list.userTitle': '位于用户胶囊目录，代码与数据皆可写',
   'settings.capsules.list.user': '用户库',
+  'settings.capsules.list.custom': '已自定义',
+  'settings.capsules.list.customTitle': '名称/图标/描述/排序来自胶囊库，页面本身没有被改动',
+  'settings.capsules.import': '导入胶囊…',
+  'settings.capsules.importHint':
+    '选一个 .html / .htm（或含 index.html 的文件夹），它会被复制进上面的胶囊库并出现在列表里；直接往文件夹里拖文件照样有效。',
+  'settings.capsules.importTooBig': '这个文件超过单个胶囊 {limit} MiB 的上限',
+  'settings.capsules.notify.imported': '已导入「{name}」',
+  'settings.capsules.notify.importedReplaced': '已替换「{name}」',
+  'settings.capsules.notify.importedUnchanged': '「{name}」本来就在库里，只保存了它的信息',
+  'settings.capsules.notify.metaSaved': '已保存「{name}」的信息',
+  'settings.capsules.notify.metaReset': '「{name}」的信息已恢复成页面自己声明的值',
+  'settings.capsules.notify.deleted': '已删除「{name}」',
+  'settings.capsules.notify.deletedKeptData': '已删除「{name}」的入口文件，它的数据文件还留在文件夹里',
+  'settings.capsules.stale':
+    '有 {count} 条保存过的胶囊信息已经对不上任何文件（可能是手动删了文件）——下次保存时会自动清理。',
+  'settings.capsules.edit': '信息',
+  'settings.capsules.editSave': '保存',
+  'settings.capsules.editCancel': '取消',
+  'settings.capsules.editReset': '恢复成页面值',
+  'settings.capsules.field.title': '显示名',
+  'settings.capsules.field.titlePlaceholder': '留空 = 用页面 <title>，再没有就用文件名',
+  'settings.capsules.field.icon': '图标',
+  'settings.capsules.field.iconPlaceholder': '📄 或 https:// / data: 图片',
+  'settings.capsules.field.description': '描述',
+  'settings.capsules.field.descriptionPlaceholder': '名字下面那一行说明',
+  'settings.capsules.field.order': '排序',
+  'settings.capsules.field.orderPlaceholder': '比如 10',
+  'settings.capsules.field.orderInvalid': '排序值必须是整数',
+  'settings.capsules.field.hint':
+    '这些信息存在胶囊库里，不写进页面：某个字段留空就回落到页面自己声明的值。',
+  'settings.capsules.delete': '删除…',
+  'settings.capsules.deleteConfirm': '确认删除',
+  'settings.capsules.deleteConfirmHint': '会从胶囊库里删掉入口文件，且不可撤销。',
+  'settings.capsules.deleteData': '连数据文件一起删',
   'settings.capsules.subdomain.label': '独立 origin',
   'settings.capsules.subdomain.title':
     '独立 origin：这个胶囊用 <slug>.localhost，浏览器 localStorage / 窗口句柄与主界面隔离',

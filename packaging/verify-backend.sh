@@ -19,7 +19,7 @@ REPORT="$REPO_ROOT/build/backend-verify.json"
 RUN_LOG="$REPO_ROOT/build/backend-verify-run.log"
 PID_FILE="$REPO_ROOT/build/backend-verify.pid"
 # 验收用的临时配置根：后端读的 `settings.json` 就是 shell 那份（同一个 YHUB_CONFIG_DIR），
-# 这里造一份只属于验收的配置，绝不碰用户真实的 ~/.config/yhub。
+# 这里造一份只属于验收的配置，绝不碰用户真实的 ~/.yhub。
 VERIFY_CONFIG="$REPO_ROOT/build/verify-config"
 # 「库里的胶囊」（capsules_dir 扫目录）验收用的临时目录 + 一个「目录外」文件（symlink 逃逸对照）
 VERIFY_APPS="$REPO_ROOT/build/verify-apps"
@@ -107,7 +107,7 @@ start_and_wait() {
   # 在子 shell 里起进程（不是主 shell 的 job），这样 kill 它时不会往 stderr 喷
   # "Terminated: 15" 这种 job control 噪音；pid 经文件回传。
   # 信息墙会往 <配置根>/dashboard/snapshots.jsonl 落快照：验收跑一次性测试，
-  # 换成 build/ 下的临时根，别动用户真实的 ~/.config/yhub（同 scripts/smoke_dashboard.py）。
+  # 换成 build/ 下的临时根，别动用户真实的 ~/.yhub（同 scripts/smoke_dashboard.py）。
   ( YHUB_PORT="$PORT" YHUB_DASHBOARD_DIR="$REPO_ROOT/build/verify-dashboard" \
       YHUB_CONFIG_DIR="$VERIFY_CONFIG" YHUB_SYSTEM_CAPSULES_DIR="${SYSTEM_CAPS_DIR}" RCLONE_CONFIG="$VERIFY_RCLONE_CONF" \
       "${BACKEND_CMD[@]}" gui --no-open --port "$PORT" >>"$RUN_LOG" 2>&1 & echo $! > "$PID_FILE" )
@@ -362,12 +362,17 @@ print(f"PASS /api/capsules 列表：{len(listing['capsules'])} 个 {rel_paths}�
 
 # 引导三态 + 一键创建（2026-11）：列表要如实报出用户层状态与推荐位置；
 # ensure 负责「建目录 + 写配置」，界面据此做「使用推荐位置 / 创建这个目录」。
-for field in ("configured", "problem", "problem_detail", "configured_path", "recommended_dir"):
+for field in ("configured", "problem", "problem_detail", "configured_path", "recommended_dir",
+              "capsules_enabled", "capsules_dir_exists", "using_default", "default_capsules_dir"):
     assert field in listing, f"/api/capsules 缺引导字段 {field}：{list(listing)}"
 assert listing["configured"] is True and listing["problem"] is None, \
     f"配好的临时目录该是正常态：configured={listing['configured']} problem={listing['problem']}"
-assert listing["recommended_dir"] == "~/Y-Hub/capsules", f"推荐位置不符：{listing['recommended_dir']!r}"
-print(f"PASS 胶囊引导三态：configured=True problem=None recommended={listing['recommended_dir']}")
+assert listing["capsules_enabled"] is True and listing["using_default"] is False, \
+    f"显式配了路径就不该报默认位置：{listing.get('capsules_enabled')} {listing.get('using_default')}"
+_default_dir = os.path.abspath(os.path.expanduser(listing["recommended_dir"]))
+assert _default_dir == os.path.join(cfg_root, "capsules"), \
+    f"默认位置该是配置根下的 capsules：{listing['recommended_dir']!r}"
+print(f"PASS 胶囊引导三态：configured=True problem=None enabled=True default={listing['recommended_dir']}")
 
 # 指向一个不存在的路径 → problem=missing；ensure 建好之后 → problem 消失
 # （先删干净：上一轮 ensure 建出来的目录会留在 build/ 里，不删就不是「不存在」了）
@@ -393,6 +398,62 @@ status, body, _headers = call("/api/settings", method="PUT", data=restore, heade
 assert status == 200, f"还原 capsules_dir -> HTTP {status}"
 assert get_json("/api/capsules")["problem"] is None, "还原后该恢复正常态"
 shutil.rmtree(_absent_dir, ignore_errors=True)  # 不留脏目录给下一轮
+
+# ---- 零配置（2026-11）：默认位置 = <配置根>/capsules，首次导入/保存时自动创建；
+# 「关掉用户层」是 capsules_enabled 这个开关，不是把 capsules_dir 写成空串（空串 = 用默认位置，
+# 因为空串是每一份历史配置的默认值，不能同时表示「关闭」）。
+_cfg_file = os.path.join(cfg_root, "settings.json")
+for pair in ({"capsules_enabled": False}, {"capsules_dir": ""}):
+    status, body, _h = call("/api/settings", method="PUT",
+                            data=json.dumps({"keys": pair}).encode(),
+                            headers={"Content-Type": "application/json"})
+    assert status == 200, f"写胶囊库开关失败 {pair}: HTTP {status} {body[:120]!r}"
+off = get_json("/api/capsules")
+assert off["problem"] == "disabled" and off["configured"] is False and off["capsules_enabled"] is False, \
+    f"关掉的用户层该报 disabled：{off.get('problem')!r}"
+assert off["capsules_dir"] == "" and off["using_default"] is True, \
+    f"空串 = 默认位置（不是关闭）：{off.get('capsules_dir')!r} / using_default={off.get('using_default')}"
+assert off["default_capsules_dir"].endswith("/capsules"), f"默认位置字段不对：{off.get('default_capsules_dir')!r}"
+status, body, _h = call("/api/capsules/import", method="POST",
+                        data=json.dumps({"filename": "while-off.html", "content": "<html></html>"}).encode(),
+                        headers={"Content-Type": "application/json"})
+assert status == 400, f"库关着的时候导入该 400（不许偷偷建库）：HTTP {status} {body[:120]!r}"
+print("PASS 胶囊库开关：关掉 → problem=disabled、导入 400（不会偷偷建库、也不会把空串当关闭）")
+
+# 打开（路径留空 = 默认位置）→ 目录还不存在也不算问题；首次导入才把它建出来
+status, body, _h = call("/api/settings", method="PUT",
+                        data=json.dumps({"keys": {"capsules_enabled": True, "capsules_dir": ""}}).encode(),
+                        headers={"Content-Type": "application/json"})
+assert status == 200, f"打开胶囊库失败：HTTP {status}"
+fresh = get_json("/api/capsules")
+_default_lib = os.path.join(cfg_root, "capsules")
+assert fresh["problem"] is None and fresh["configured"] is True, \
+    f"默认位置还没建出来也不算问题（首次写入时创建）：{fresh.get('problem')!r}"
+assert fresh["using_default"] is True and fresh["capsules_dir_exists"] == os.path.isdir(_default_lib), \
+    f"using_default / exists 该如实报出：{fresh.get('using_default')} {fresh.get('capsules_dir_exists')}"
+status, body, _h = call("/api/capsules/import", method="POST",
+                        data=json.dumps({"filename": "zero-config.html",
+                                         "content": "<!doctype html><html><body>zero</body></html>"}).encode(),
+                        headers={"Content-Type": "application/json"})
+assert status == 200, f"零配置导入失败：HTTP {status} {body[:160]!r}"
+assert os.path.isfile(os.path.join(_default_lib, "zero-config.html")), "导入没落到默认位置"
+after = get_json("/api/capsules")
+assert "zero-config.html" in [t["relpath"] for t in after["capsules"]], "默认位置里的胶囊该出现在列表里"
+assert after["using_default"] is True and after["capsules_dir_exists"] is True, \
+    f"首次导入该把默认位置建出来：{after.get('using_default')} {after.get('capsules_dir_exists')}"
+with open(_cfg_file, encoding="utf-8") as fh:
+    stored_cfg = json.load(fh)
+assert stored_cfg.get("capsules_dir") == "", \
+    f"用默认位置时**不能**把绝对路径写进配置（否则数据根搬家会把库落下）：{stored_cfg.get('capsules_dir')!r}"
+print("PASS 零配置：默认位置 <配置根>/capsules 首次导入自动创建，且不把绝对路径钉进 settings.json")
+
+# 还原验收现场：显式路径 + 删掉默认库里这一轮建出来的东西
+status, body, _h = call("/api/settings", method="PUT",
+                        data=json.dumps({"key": "capsules_dir", "value": capsules_dir}).encode(),
+                        headers={"Content-Type": "application/json"})
+assert status == 200, f"还原 capsules_dir -> HTTP {status}"
+assert get_json("/api/capsules")["problem"] is None, "还原后该恢复正常态"
+shutil.rmtree(_default_lib, ignore_errors=True)
 
 # ---- 书签式三件套：有就给真的，没有就给空串（绝不编、绝不回落成文件名——回落是显示层的事）
 by_rel = {t["relpath"]: t for t in listing["capsules"]}
@@ -628,6 +689,135 @@ assert "子目录/fresh.html" not in got, f"删掉的文件还留在列表里：
 print("PASS 生命周期：放进去就出现、删掉就消失（无导入、无清单）")
 
 # ---------------------------------------------------------------------------
+# 导入 / 声明式元数据 / 库内删除（2026-11）：扫描仍是「什么是胶囊」的唯一真相 ——
+# 导入只是把文件写进同一棵树，capsules.json 只是给扫到的胶囊**加装饰**。
+# 验的是三件事：文件名的清洗（一段到底）、覆盖层只装饰不遮蔽、删胶囊只删用户层。
+import base64
+
+_import_body = json.dumps({
+    "filename": "../evil/imported.html",
+    "content_base64": base64.b64encode(
+        '<!doctype html><html><head><title>Scraped Title</title></head><body>imported</body></html>'.encode()
+    ).decode(),
+}).encode()
+status, body, _h = call("/api/capsules/import", method="POST", data=_import_body,
+                        headers={"Content-Type": "application/json"})
+assert status == 200, f"POST /api/capsules/import -> HTTP {status} {body[:160]!r}"
+imp = json.loads(body)
+assert imp["relpath"] == "imported.html", f"文件名该被压成一段、路径段该被丢掉：{imp['relpath']!r}"
+assert imp["replaced"] is False and imp["capsule"]["url_path"] == "imported", f"导入回执不对：{imp}"
+assert os.path.isfile(os.path.join(capsules_dir, "imported.html")), "文件没真的落进用户库"
+print("PASS 胶囊导入：../evil/imported.html 被压成 imported.html，写进用户库后立刻出现在列表里")
+
+# 再导一次同名 → 不覆盖，改成 imported-2.html（除非显式 replace）
+status, body, _h = call("/api/capsules/import", method="POST", data=_import_body,
+                        headers={"Content-Type": "application/json"})
+dup = json.loads(body)
+assert status == 200 and dup["relpath"] == "imported-2.html", f"同名导入该改名而不是覆盖：{dup}"
+# 已经躺在库里的文件不算导入：只记元数据，不复制出 name-2.html
+status, body, _h = call("/api/capsules/import", method="POST",
+                        data=json.dumps({"path": os.path.join(capsules_dir, "panel.html")}).encode(),
+                        headers={"Content-Type": "application/json"})
+same = json.loads(body)
+assert status == 200 and same.get("unchanged") is True and same["relpath"] == "panel.html", \
+    f"库内文件该原地登记、不复制：{same}"
+# 非 html / 空文件 → 明确拒绝
+for bad in ({"filename": "notes.txt", "content": "x"}, {"filename": "empty.html", "content": ""}):
+    status, body, _h = call("/api/capsules/import", method="POST", data=json.dumps(bad).encode(),
+                            headers={"Content-Type": "application/json"})
+    assert status == 400 and json.loads(body)["error"], f"该拒的导入被放行：{bad} -> HTTP {status}"
+# 元数据在导入时就一并带上：字段非法要先校验再落盘，不能留下半个导入
+status, body, _h = call("/api/capsules/import", method="POST",
+                        data=json.dumps({"filename": "badmeta.html", "content": "<html></html>",
+                                         "meta": {"icon": "javascript:alert(1)"}}).encode(),
+                        headers={"Content-Type": "application/json"})
+assert status == 400, f"非法元数据该让整次导入失败：HTTP {status}"
+assert not os.path.exists(os.path.join(capsules_dir, "badmeta.html")), \
+    "元数据没通过校验时文件也不该落盘（不能留半个导入）"
+print("PASS 胶囊导入边界：同名 → name-2；库内文件原地登记；非 .html / 空文件 / 非法元数据一律拒绝（且不落盘）")
+
+# 声明式元数据：名字/图标/排序覆盖抓取值，文件本身不动；留空即回落
+status, body, _h = call("/api/capsules/meta", method="POST",
+                        data=json.dumps({"relpath": "imported.html", "title": "声明名",
+                                         "icon": "📄", "description": "声明描述", "order": 1}).encode(),
+                        headers={"Content-Type": "application/json"})
+assert status == 200, f"POST /api/capsules/meta -> HTTP {status} {body[:160]!r}"
+meta_file = os.path.join(cfg_root, "capsules.json")
+assert os.path.isfile(meta_file), "元数据该落到配置根的 capsules.json"
+with open(meta_file, encoding="utf-8") as fh:
+    stored = json.load(fh)["capsules"]
+assert stored["imported.html"]["title"] == "声明名", f"capsules.json 内容不对：{stored}"
+decorated = {t["relpath"]: t for t in get_json("/api/capsules")["capsules"]}
+first = decorated["imported.html"]
+assert first["title"] == "声明名" and first["icon"] == "📄" and first["meta"]["order"] == 1, \
+    f"覆盖层没生效：{first}"
+assert [t["relpath"] for t in get_json("/api/capsules")["capsules"]][0] == "imported.html", \
+    "order=1 该把这一格排到最前面"
+with open(os.path.join(capsules_dir, "imported.html"), encoding="utf-8") as fh:
+    assert "<title>Scraped Title</title>" in fh.read(), "元数据是覆盖层：绝不能改页面文件"
+# 非法值 → 400，且 capsules.json 一个字都不写
+before_meta = open(meta_file, "rb").read()
+for bad_meta in ({"relpath": "imported.html", "order": "abc"},
+                 {"relpath": "imported.html", "icon": "javascript:alert(1)"},
+                 {"relpath": "nope.html", "title": "x"}):
+    status, body, _h = call("/api/capsules/meta", method="POST", data=json.dumps(bad_meta).encode(),
+                            headers={"Content-Type": "application/json"})
+    assert status == 400 and json.loads(body)["error"], f"该拒的元数据被放行：{bad_meta} -> HTTP {status}"
+assert open(meta_file, "rb").read() == before_meta, "被拒的元数据写入落盘了（必须一个字都不写）"
+# 清空一个字段 → 回落到页面自己的值
+status, body, _h = call("/api/capsules/meta", method="POST",
+                        data=json.dumps({"relpath": "imported.html", "title": None}).encode(),
+                        headers={"Content-Type": "application/json"})
+assert status == 200, f"清空字段失败：HTTP {status}"
+back = {t["relpath"]: t for t in get_json("/api/capsules")["capsules"]}["imported.html"]
+assert back["title"] == "Scraped Title" and back["meta"].get("icon") == "📄", \
+    f"清空 title 该回落到 <title>、别的字段不受影响：{back}"
+print("PASS 胶囊元数据：覆盖 title/icon/order（页面文件不动）· 非法值不落盘 · 清空即回落")
+
+# 清单跟着文件走：文件被手动删掉 → 覆盖层条目变成 stale，下一次元数据写入顺手清理
+os.unlink(os.path.join(capsules_dir, "imported-2.html"))
+status, body, _h = call("/api/capsules/meta", method="POST",
+                        data=json.dumps({"relpath": "imported-2.html", "title": "幽灵"}).encode(),
+                        headers={"Content-Type": "application/json"})
+assert status == 400, f"对不存在的胶囊声明元数据该 400：HTTP {status}"
+os.unlink(os.path.join(capsules_dir, "imported.html"))
+stale = get_json("/api/capsules")
+assert stale["stale_metadata"] >= 1, f"文件没了该报 stale：{stale.get('stale_metadata')}"
+assert "imported.html" not in [t["relpath"] for t in stale["capsules"]], "文件没了不该还在列表里"
+call("/api/capsules/meta", method="POST",
+     data=json.dumps({"relpath": "panel.html", "title": "临时"}).encode(),
+     headers={"Content-Type": "application/json"})
+with open(meta_file, encoding="utf-8") as fh:
+    pruned = json.load(fh)["capsules"]
+assert "imported.html" not in pruned, f"下一次元数据写入该清掉幽灵条目：{pruned}"
+print("PASS 胶囊清单跟着文件走：手动删文件 → stale，下一次写入顺手清理，绝不出现幽灵磁贴")
+
+# 库内删除：只删用户层（内置胶囊退回「禁用」），目录胶囊默认保留数据
+status, body, _h = call("/api/capsules/delete", method="POST",
+                        data=json.dumps({"relpath": "tiddlywiki.html"}).encode(),
+                        headers={"Content-Type": "application/json"})
+assert status == 400, f"内置胶囊该拒删（改用禁用）：HTTP {status}"
+sys_path = os.path.join(capsules_dir, "看板", "index.html")
+assert os.path.isfile(sys_path), "前置条件：目录胶囊 看板/index.html 该在"
+status, body, _h = call("/api/capsules/delete", method="POST",
+                        data=json.dumps({"relpath": "看板/index.html"}).encode(),
+                        headers={"Content-Type": "application/json"})
+removed = json.loads(body)
+assert status == 200 and removed["kept_data"] is True, f"目录胶囊默认该保留数据：{removed}"
+assert not os.path.isfile(sys_path) and os.path.isdir(os.path.join(capsules_dir, "看板")), \
+    "只该删入口文件，数据目录要留着"
+assert "看板/index.html" not in [t["relpath"] for t in get_json("/api/capsules")["capsules"]], \
+    "删掉的胶囊还在列表里"
+# 还原验收现场（后面的生命周期断言按这套文件跑）
+with open(sys_path, "w", encoding="utf-8") as fh:
+    fh.write('<!doctype html>\n<html><body><h1>目录首页</h1></body></html>\n')
+print("PASS 库内删除：内置胶囊拒删（改用禁用）· 目录胶囊默认保留数据 · 入口文件消失即从列表消失")
+# 还原验收现场：panel.html 的声明清掉，后面的阶段看到的就是纯扫描结果
+call("/api/capsules/meta", method="POST",
+     data=json.dumps({"relpath": "panel.html", "reset": True}).encode(),
+     headers={"Content-Type": "application/json"})
+
+# ---------------------------------------------------------------------------
 # 配置读写（/api/settings）：写入口不再只有桌面壳 —— CLI 与网页端共用同一套语义与校验。
 # 这里刻意验「被拒时一个字都不落盘」：半截配置比没改更糟，是这套接口最容易写坏的地方。
 cfg_file = os.path.join(cfg_root, "settings.json")
@@ -683,7 +873,7 @@ with open(os.environ["REQ_TIMES"], "w") as fh:
 PY
 
 say "2.5/5 MCP 面清单（声明层，源码全量）"
-# 配置根钉死成验收用的临时目录：用户机器上装了外置插件（~/.config/yhub/plugins/）时，
+# 配置根钉死成验收用的临时目录：用户机器上装了外置插件（~/.yhub/plugins/）时，
 # 这条「内置 7 个 MCP 工具」的源码层断言也不该被外置清单污染（见 docs/plugins.md）。
 YHUB_CONFIG_DIR="$VERIFY_CONFIG" uv run python - <<'PY' || { echo "FAIL MCP 面清单变了（要改文档：AGENTS.md + api-contract.md）"; exit 1; }
 from yhub.server.adapters import discover_adapters
@@ -949,7 +1139,7 @@ os.environ["RCLONE_RECORD"] = str(record)
 os.environ["FAKE_MOUNT_POINT"] = str(point.resolve())
 os.environ["FAKE_MOUNT_FLAG"] = str(work / "mounted.flag")
 # 状态文件路径是**现算**的（跟着 YHUB_CONFIG_DIR 走）→ 把配置根挪到临时目录，假 rclone 的
-# 调用记录与状态就落在 work/ 下，不会碰用户真实的 ~/.config/yhub/rclone.state.json。
+# 调用记录与状态就落在 work/ 下，不会碰用户真实的 ~/.yhub/rclone.state.json。
 os.environ["YHUB_CONFIG_DIR"] = str(work)
 state = rc.state_path()
 rc.RCLONE_CONFIG_PATH = config

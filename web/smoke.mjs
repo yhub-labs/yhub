@@ -22,9 +22,24 @@ const browser = await chromium.launch({
   args: ['--no-first-run', '--no-default-browser-check', '--disable-gpu'],
 })
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
-// 语言必须**确定**：界面读 localStorage（`yhub.lang`），后端按 settings 的 ui_language 渲染自己的
-// 字符串。addInitScript 在首个 about:blank 上写不进去（Playwright 的历史坑），所以起手先落 origin
-// 再写一次、然后重载——否则冒烟会拿「英文界面 vs 中文工具名」互相打架，红得莫名其妙。
+// 语言必须**确定**：界面文案现在跟随后端的 `settings.ui_language`（0.1.7 起，见 commit 0203286），
+// 工具名/状态文案也由后端渲染。这套断言的中文选择器因此要求后端就是 zh-CN —— 先探一下，
+// 不是就立刻说清楚怎么跑，而不是让后面十几条断言莫名其妙地超时。localStorage 那一手保留着，
+// 供仍在按 localStorage 取语言的老版本界面使用。
+const backendLang = await fetch(`${URL}api/settings`)
+  .then((r) => r.json())
+  .then((d) => d?.settings?.ui_language)
+  .catch(() => null)
+if (backendLang !== 'zh-CN') {
+  console.log(
+    `FAIL  冒烟需要一个 zh-CN 的后端（当前 ui_language=${backendLang}）。用临时配置根起一个再跑，例如：\n` +
+      '  mkdir -p /tmp/yh-smoke && echo \'{"ui_language": "zh-CN"}\' > /tmp/yh-smoke/settings.json\n' +
+      '  YHUB_CONFIG_DIR=/tmp/yh-smoke YHUB_SETTINGS_FILE=/tmp/yh-smoke/settings.json uv run yhub gui --no-open --port 8797 &\n' +
+      '  cd web && YHUB_GUI_URL=http://127.0.0.1:8797 npm run smoke',
+  )
+  await browser.close()
+  process.exit(1)
+}
 await page.addInitScript(() => window.localStorage.setItem('yhub.lang', 'zh-CN'))
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
@@ -1037,15 +1052,15 @@ try {
     const el = document.querySelector('main [data-section="capsules"]')
     const t = el?.innerText ?? ''
     return {
-      unset: /使用推荐位置/.test(t),
+      disabled: /已关闭|打开（默认位置）/.test(t),
       broken: /创建这个目录|重新选择/.test(t),
       ok: /已启用/.test(t),
       manual: /手动填写/.test(t),
     }
   })
   check(
-    '设置面板：胶囊库按三态给出引导（未配置 / 配错 / 正常 至少一种）',
-    guide.unset || guide.broken || guide.ok,
+    '设置面板：胶囊库按状态给出引导（已关闭 / 配错 / 正常 至少一种）',
+    guide.disabled || guide.broken || guide.ok,
     JSON.stringify(guide),
   )
   // 手动填写是逃生舱：点开后才有输入框，且未改动时「保存」是灰的（draft 逻辑在起作用）
@@ -1073,6 +1088,62 @@ try {
     openButtons > 0 ? true : /还没有胶囊|暂未扫描/.test(cfgText),
     cfgText.replace(/\s+/g, ' ').slice(0, 200),
   )
+
+  // 12b) 导入入口 + 声明式元数据：导入是可选的正门（拖文件进目录照样有效），编辑只写胶囊库不动页面
+  const section = page.locator('main [data-section="capsules"]')
+  check(
+    '设置面板：胶囊库有导入入口（文件选择器只收 .html/.htm）',
+    (await section.locator('input[type="file"][accept*=".html"]').count()) === 1,
+  )
+  if (openButtons > 0) {
+    const declared = `冒烟声明名-${Date.now()}`
+    await section.locator('button', { hasText: '信息' }).first().click()
+    const editor = section.locator('[data-capsule-editor]').first()
+    await editor.waitFor({ state: 'visible', timeout: 5000 })
+    await editor.locator('input[type="text"]').first().fill(declared)
+    await editor.locator('button', { hasText: '保存' }).first().click()
+    let afterText = ''
+    for (let i = 0; i < 40; i++) {
+      afterText = await section.innerText()
+      if (afterText.includes(declared)) break
+      await page.waitForTimeout(200)
+    }
+    check(
+      '设置面板：编辑胶囊信息 → 覆盖显示名并标为「已自定义」（只进胶囊库，不改页面）',
+      afterText.includes(declared) && afterText.includes('已自定义'),
+      afterText.replace(/\s+/g, ' ').slice(0, 200),
+    )
+    // 还原：恢复成页面自己声明的值，列表里不该再出现这个名字
+    await section.locator('button', { hasText: '信息' }).first().click()
+    const editor2 = section.locator('[data-capsule-editor]').first()
+    await editor2.waitFor({ state: 'visible', timeout: 5000 })
+    const resetBtn = editor2.locator('button', { hasText: '恢复成页面值' })
+    if ((await resetBtn.count()) > 0) {
+      await resetBtn.first().click()
+    } else {
+      // 编辑面板没展开成「有覆盖」形态时直接走接口，避免脏数据留在真实胶囊库里
+      await page.evaluate(
+        (name) =>
+          fetch('/api/capsules/meta', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ relpath: name, reset: true }),
+          }),
+        (vaultCapsules && vaultCapsules[0] && vaultCapsules[0].relpath) || '',
+      )
+    }
+    let revertedText = ''
+    for (let i = 0; i < 40; i++) {
+      revertedText = await section.innerText()
+      if (!revertedText.includes(declared)) break
+      await page.waitForTimeout(200)
+    }
+    check(
+      '设置面板：恢复成页面值 → 声明名消失（胶囊清单永远跟着文件走）',
+      !revertedText.includes(declared),
+      revertedText.replace(/\s+/g, ' ').slice(0, 200),
+    )
+  }
 
   // 13) 启动器：capsules_dir 扫出来的 HTML 胶囊自动进搜索列表，搜得到、可跳转到 web 页面
   //     这一态没有 <main>（整页就是启动器），断言读 [data-launcher]；整段**只读**：

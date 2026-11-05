@@ -1,10 +1,23 @@
-# Config: `~/.config/yhub/settings.json`
+# Config: `~/.yhub/settings.json`
 
 ## File and config root
 
-`YHUB_SETTINGS_FILE` names the file (its parent is then the config root) → `YHUB_CONFIG_DIR` → `~/.config/yhub`,
+**One data root: `~/.yhub`** (hidden, app-owned). Settings, state files (`rss.json`, `schedule.json` + `schedule/`,
+`dashboard/`, `plugins/`, `plugins.lock.json`, `plugins-registry-cache.json`, `rclone.state.json`, `capsules.json`),
+`logs/`, `.env` and the default capsule library (`~/.yhub/capsules`) all live under it, so "back up / carry to another
+machine" is one folder. The only writes outside it are `capsules_dir` (when explicitly overridden) and the OS-owned
+locations Y-Hub does not own: `~/.config/rclone/rclone.conf` (rclone's own convention) and the scheduler daemon's
+`~/Library/LaunchAgents/*.plist` (systemd user units on Linux).
+
+`YHUB_SETTINGS_FILE` names the file (its parent is then the config root) → `YHUB_CONFIG_DIR` → `~/.yhub`,
 identically on both sides. A missing file reads as defaults and is not created until the first write; writes are atomic
 (temp + rename), nothing is cached in memory, and secrets live only in `.env` (`YHUB_*`, Python-side, never echoed).
+
+The same root holds the other machine-state files: `rss.json`, `schedule.json` + `schedule/`, `dashboard/`,
+`plugins/` + `plugins.lock.json` + `plugins-registry-cache.json`, `rclone.state.json`, `logs/`, and
+`capsules.json` (declared capsule details: name / icon / description / order, keyed by relpath — see
+[capsules.md §6b](capsules.md)). User content stays wherever `capsules_dir` points: empty means the default
+`~/.yhub/capsules` (created on the first import/save), and `capsules_enabled: false` turns that layer off.
 
 ## Ownership and entry points
 
@@ -41,7 +54,8 @@ Section names (`hotkeys`, `tray`, `plugins`) read and write as a whole; action i
 | `tray.double_click` | enum | `none` | same three literals |
 | `tray.show_on_start` | bool | `false` | boolean |
 | `tray.show_notifications` | bool | `false` | boolean |
-| `capsules_dir` | string | `""` | absolute or `~/…`, trailing `/` stripped; empty = no capsule scan |
+| `capsules_dir` | string | `""` (the default location) | absolute or `~/…`, trailing `/` stripped; **empty = the default location** `<config root>/capsules`, created on the first import/save (empty is *not* "off") |
+| `capsules_enabled` | bool | `true` | the user capsule library's on/off switch; `false` = built-in samples only (`POST /api/capsules/ensure` turns it back on) |
 | `capsules_disabled` | list[str] | `[]` | strings; matched as `source:relpath`, `relpath`, top-level directory or bare name |
 | `capsules_subdomains` | bool | `false` | boolean; effective per capsule = `overrides[scope] ?? this` |
 | `capsules_subdomains_overrides` | object | `{}` | non-empty string keys, boolean values; written whole |
@@ -50,7 +64,12 @@ Section names (`hotkeys`, `tray`, `plugins`) read and write as a whole; action i
 | `plugins_marketplace` | bool | `true` | backend-only; `false` = the marketplace is off: nothing is fetched and installing by id stops resolving. The switch, not an empty URL — the old default was persisted as `""` in every existing config |
 | `plugins` | object | `{}` | open map: the section and each `plugins.<id>` must be objects |
 
-`capsules_dir` is the library directory scanned by `capsules.py`; `~/Y-Hub/capsules` is created by `POST /api/capsules/ensure` ([`capsules.md`](capsules.md)).
+`capsules_dir` overrides the library location scanned by `capsules.py`; leaving it empty uses
+`<config root>/capsules`, which `POST /api/capsules/import` / the first capsule save create on demand
+([`capsules.md`](capsules.md)). The default is deliberately **not** pinned into the file: no absolute path is
+written, so the library moves with the data root. Turning the layer off is `capsules_enabled: false`, never an
+empty path (the same split as `plugins_registry_url` / `plugins_marketplace` — `""` is the default value of
+every settings file ever written, so it cannot also mean "disabled").
 
 ## `plugins.*`: open namespace
 
