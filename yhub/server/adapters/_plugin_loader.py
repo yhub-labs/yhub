@@ -1,4 +1,4 @@
-"""External plugin loader: scans ``~/.config/yhub/plugins/<id>/`` (``plugin.json`` + ``plugin.py``).
+"""External plugin loader: scans ``~/.yhub/plugins/<id>/`` (``plugin.json`` + ``plugin.py``).
 
 Three hard rules (details in docs/plugins.md):
   1. pure Python — plugins run in the host's interpreter and may only use the stdlib / dependencies the

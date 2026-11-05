@@ -82,7 +82,7 @@ installed `yhub` (PATH, `~/.local/bin`, Homebrew) → `uv run yhub gui`, and onl
 started. The bundle carries no Python: install it with `make install-backend` or `pip install yhub`.
 
 ```text
-~/.config/yhub/                    the config root (overrides: config.md)
+~/.yhub/                    the config root (overrides: config.md)
   settings.json                    settings, written by both sides
   .env                             secrets (YHUB_* prefix; never printed)
   plugins/<id>/, plugins.lock.json, plugins-registry-cache.json   installed plugins, sources, registry index

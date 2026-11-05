@@ -16,7 +16,7 @@ export const isTauri = (): boolean => {
 }
 
 /**
- * Settings (stored in ~/.config/yhub/settings.json, read/written by tauri/src/config.rs).
+ * Settings (stored in ~/.yhub/settings.json, read/written by tauri/src/config.rs).
  *
  * The UI only uses the surface exposed here, addressed by dotted paths (e.g. `tray.close_behavior`),
  * so adding a key never changes the IPC signature. Allowed values, the hotkey action table and the

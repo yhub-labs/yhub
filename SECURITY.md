@@ -1,6 +1,6 @@
 # Security
 
-Y-Hub runs a local backend on `127.0.0.1`. Treat `~/.config/yhub/.env` as a secret: it may hold
+Y-Hub runs a local backend on `127.0.0.1`. Treat `~/.yhub/.env` as a secret: it may hold
 tokens for services you connect, and it must never be pasted into an issue.
 
 ## Reporting a vulnerability

@@ -21,7 +21,7 @@
 #   YHUB_BIN=…          指定被测二进制（并行开发时建议 cp 一份快照再用它）
 #   YHUB_REAL_BACKEND=… 指定真后端 `yhub`（默认找 PATH / ~/.local/bin/yhub，都没有就 uv run）
 #
-# 安全性：程序以 YHUB_CONFIG_DIR 指向临时目录运行，绝不读写 ~/.config/yhub/。
+# 安全性：程序以 YHUB_CONFIG_DIR 指向临时目录运行，绝不读写 ~/.yhub/。
 # 端口：每个用例都换一个空闲端口（YHUB_BACKEND_PORT），不碰 8790 上你正在用的后端。
 
 set -uo pipefail

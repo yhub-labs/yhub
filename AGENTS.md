@@ -4,7 +4,7 @@ The working handbook for agents and newcomers. Product overview: [`README.md`](R
 
 ## Naming (authoritative)
 
-- **Project `yhub`** / **product `Y-Hub`**: project name for the repository, PyPI distribution, the single top-level package `yhub/`, CLI command, config root `~/.config/yhub`, environment prefix `YHUB_`; product name for UI copy and prose, `Y-Hub.app`, the signing identity `Y-Hub Local Dev`.
+- **Project `yhub`** / **product `Y-Hub`**: project name for the repository, PyPI distribution, the single top-level package `yhub/`, CLI command, config root `~/.yhub`, environment prefix `YHUB_`; product name for UI copy and prose, `Y-Hub.app`, the signing identity `Y-Hub Local Dev`.
 - Keep real service hosts verbatim in code and config; use `example.com` in docs, logs and commits.
 
 ## Repository map
@@ -46,11 +46,20 @@ Declare one entry in the adapter's `presentation.tiles`: `id` / `zone` / `order`
 
 ## Capsules
 
-Point `settings.json: capsules_dir` at a directory of single-file HTML apps: they are served verbatim at `/capsules/<path>` and a `PUT` saves back to disk. Isolation has two layers: per-capsule CSP (`capsules.page_csp()`) and the `Referer`-based `_scope_denied()` check; `/api/*` returns 403 for capsule referers. Keep both when changing `/capsules/*` (asserted in `packaging/verify-backend.sh`). Contract: [`docs/capsules.md`](docs/capsules.md).
+Point `settings.json: capsules_dir` at a directory of single-file HTML apps: they are served verbatim at `/capsules/<path>` and a `PUT` saves back to disk. The scan is the only truth about *which* capsules exist; `POST /api/capsules/import` (front door, creates the library on demand) and `capsules.json` (declared name/icon/description/order, data layer in `_capsules_import.py`) only add and decorate — never gate. Isolation has two layers: per-capsule CSP (`capsules.page_csp()`) and the `Referer`-based `_scope_denied()` check; `/api/*` returns 403 for capsule referers. Keep both when changing `/capsules/*` (asserted in `packaging/verify-backend.sh`). Contract: [`docs/capsules.md`](docs/capsules.md).
+
+## Data root
+
+Everything lives in `~/.yhub` (settings, state, plugins, logs, default `capsules/`) — one folder to back
+up or carry to another machine. It is only ever changed through `config_dir()` on both sides
+(`tauri/src/config.rs` and `yhub/server/adapters/settings.py`, which must keep the same fallbacks:
+`YHUB_SETTINGS_FILE` > `YHUB_CONFIG_DIR` > `~/.yhub`). There is deliberately **no migration** of the
+old `~/.config/yhub` root (no users to carry), and the env overrides must keep bypassing any default
+so tests never touch the real home.
 
 ## Config keys: decide ownership first
 
-Both entry points write `~/.config/yhub/settings.json` through `/api/settings`: the desktop settings page and the web settings page (`/?view=settings`).
+Both entry points write `~/.yhub/settings.json` through `/api/settings`: the desktop settings page and the web settings page (`/?view=settings`).
 
 - **Shell-owned** (needed at startup): `version` / `hotkeys.*` / `tray.*` → change `tauri/src/config.rs` **and** `yhub/server/adapters/settings.py`, then run `./tauri/scripts/verify-settings-parity.sh` and `cd tauri && cargo test config::`.
 - **Backend-owned**: everything else → change `settings.py` only (`defaults` / `known_keys` / validation); the shell's save merges only its own keys and preserves the rest.
@@ -78,7 +87,7 @@ New tools add 2–3 assertions to `web/smoke.mjs`.
 
 ## Hard constraints and pitfalls
 
-- `~/.config/yhub/.env` holds secrets: values never appear in output, logs, docs or commits. The server listens on `127.0.0.1` only and has no authentication.
+- `~/.yhub/.env` holds secrets: values never appear in output, logs, docs or commits. The server listens on `127.0.0.1` only and has no authentication.
 - The backend is **not** inside the `.app`: the shell tries "reuse 8790 → `YHUB_BACKEND_BIN` → PATH/`~/.local/bin/yhub` → `uv run yhub`". Python changes need `make install-backend` (it clears the uv cache first, otherwise the cached wheel is reused silently).
 - Installing only via `make install` (`packaging/install-app.sh`); manual `rm -rf` + `ditto` skips archiving, signature verification and cleanup.
 - Run tests with `YHUB_CONFIG_DIR` / `YHUB_SETTINGS_FILE` pointed at a temporary directory — never touch the real user config.

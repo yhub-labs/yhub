@@ -8,7 +8,7 @@ Placement follows contract §10.1:
   * Endpoints validate their own parameters: ``raise ToolError('message', hint='what to do')``
     -> standard 400 body, not FastAPI's 422 (contract §2.2).
   * This file has **no write endpoint**; changing the layout means editing
-    ``~/.config/yhub/dashboard.json`` (File over app).
+    ``~/.yhub/dashboard.json`` (File over app).
 """
 
 from __future__ import annotations

@@ -121,7 +121,7 @@ pub fn set_hotkey(hotkey: String, app: tauri::AppHandle) -> Result<String, Strin
 
 // ---------------------------------------------------------------- settings (config read/write)
 //
-// Convention: every setting lives in ~/.config/yhub/settings.json (see config.rs); the UI goes
+// Convention: every setting lives in ~/.yhub/settings.json (see config.rs); the UI goes
 // through the dotted-path interface below, so adding a setting does not change the IPC signature.
 // Hotkeys are the only item needing a runtime action in addition to persisting, hence
 // apply_hotkey: register successfully first, then write; on failure keep the old value — disk and

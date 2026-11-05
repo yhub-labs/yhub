@@ -17,7 +17,7 @@
 #   RUN_TIMEOUT=40  每个用例最多等多少秒（自检跑完会自己退出）
 #   KEEP_DIR=…      把各用例的程序日志复制到这个目录（默认随临时目录一起删）
 #
-# 安全性：程序以 YHUB_CONFIG_DIR 指向临时目录运行，绝不读写 ~/.config/yhub/settings.json。
+# 安全性：程序以 YHUB_CONFIG_DIR 指向临时目录运行，绝不读写 ~/.yhub/settings.json。
 # 注意：若 8790 端口没有后端在跑，程序会顺手把 Python 后端拉起来；脚本不会去杀它。
 
 set -uo pipefail

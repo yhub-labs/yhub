@@ -47,22 +47,15 @@ LOG = logging.getLogger("yhub.rclone")
 
 
 def _config_dir() -> Path:
-    """Config root: same fallbacks as the shell / settings.py.
+    """Config root: **delegated** to `settings.config_dir()` — one implementation, no third copy.
 
-    Parent of `YHUB_SETTINGS_FILE` > `YHUB_CONFIG_DIR` > `~/.config/yhub`.
-    The acceptance script (packaging/verify-backend.sh) uses `YHUB_CONFIG_DIR` to move state files
-    into a temp dir under build/ — ignoring these two env vars would make it write to the user's real
-    `~/.config/yhub/rclone.state.json`.
+    Why delegate: the env fallbacks (`YHUB_SETTINGS_FILE` > `YHUB_CONFIG_DIR` > `~/.yhub`) are a rule
+    that already exists there. Re-implementing them here is how a state file ends up in a directory
+    the backend never reads (or in the **real** user root while a test thought it was isolated).
     """
-    explicit = os.environ.get("YHUB_SETTINGS_FILE", "").strip()
-    if explicit:
-        parent = Path(explicit).expanduser().parent
-        if str(parent):
-            return parent
-    raw = os.environ.get("YHUB_CONFIG_DIR", "").strip()
-    if raw:
-        return Path(raw).expanduser()
-    return Path.home() / ".config" / "yhub"
+    from yhub.server.adapters.settings import config_dir  # lazy: keep CLI start-up light
+
+    return config_dir()
 
 
 def state_path() -> Path:
@@ -70,7 +63,7 @@ def state_path() -> Path:
 
     Fixing it at import burned us once (2026-09-29): setting `YHUB_CONFIG_DIR` after the import
     (acceptance scripts and throwaway harnesses love doing that) still wrote the **user's real**
-    `~/.config/yhub/rclone.state.json` — a repro script of mine wrote a `c1` record into the user's
+    `~/.yhub/rclone.state.json` — a repro script of mine wrote a `c1` record into the user's
     state file and left a real mount behind. Rule: temp environments set the env vars **before**
     importing.
     """

@@ -21,12 +21,12 @@
 //!     that dies during the readiness probe is abandoned immediately;
 //!   * **never leak**: only the backend this process launched is shut down (SIGTERM → grace period →
 //!     SIGKILL); a reused backend is never touched;
-//!   * **traceable**: the child's stdout/stderr go in full to `~/.config/yhub/logs/backend.log`, and
+//!   * **traceable**: the child's stdout/stderr go in full to `~/.yhub/logs/backend.log`, and
 //!     the bridge's own events to `desktop.log`; the UI can read the tail of both
 //!     (`backend_log_tail`).
 //!
 //! Environment variables (all for verification scripts; production defaults are 8790 / 20 s /
-//! ~/.config/yhub/logs):
+//! ~/.yhub/logs):
 //!   `YHUB_BACKEND_BIN`      the `yhub` binary to launch (a nonexistent / non-executable file is an
 //!                           **explicit error**, never a silent fallback)
 //!   `YHUB_BACKEND_PORT`     port override (tests / multiple instances only; production is 8790)

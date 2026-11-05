@@ -137,4 +137,4 @@ cd web && node verify-cli.mjs              # MCP tools/list + CLI --json ≡ HTT
 - `getBaseUrl()` is same-origin only from `tauri:`/`file:`/5173/1420; other origins fall back to
   `127.0.0.1:8790` and hit CORS — run acceptance on 8790, or `--port 5173` + `YHUB_GUI_URL`. macOS
   ships no `timeout`: bound scripts with playwright/node timeouts.
-- `~/.config/yhub/.env` holds secrets (never print); the server is `127.0.0.1`-only, no auth.
+- `~/.yhub/.env` holds secrets (never print); the server is `127.0.0.1`-only, no auth.

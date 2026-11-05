@@ -8,7 +8,7 @@ import { useI18n } from '../i18n'
  * RSS panel: one feed per row, each row can change URL / toggle / refresh / delete.
  *
  * One feed = one wall cell (`rss.<id>`). Everything here writes the same
- * `~/.config/yhub/rss.json` — editing the file by hand, the CLI, and this panel are equivalent.
+ * `~/.yhub/rss.json` — editing the file by hand, the CLI, and this panel are equivalent.
  *
  * Display and calls only; fetching, parsing and state classification all live in the backend
  * (`yhub/server/adapters/_rss.py`). A feed whose URL cannot be read is **still saved**; the panel

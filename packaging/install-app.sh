@@ -50,7 +50,7 @@ KEEP_ARCHIVES=5
 STATE="$REPO_ROOT/build/installed-app.json"
 LOG="$REPO_ROOT/build/install-app.log"
 PORT=8790
-CFG_DIR="${YHUB_CONFIG_DIR:-$HOME/.config/yhub}"
+CFG_DIR="${YHUB_CONFIG_DIR:-$HOME/.yhub}"
 BACKEND_PID_FILE="${YHUB_LOG_DIR:-$CFG_DIR/logs}/backend.pid"
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
@@ -352,7 +352,7 @@ if [ "$RESTART" = 1 ]; then
   info "拉起新装的 App…"
   # 环境隔离：本脚本常在验收/开发 shell 里被调用，那个 shell 可能还带着 YHUB_CONFIG_DIR 之类的
   # 隔离变量。App 会继承它们，于是装机版后端读的是临时配置根（症状：工具只剩几个、设置页路径
-  # 在 /var/folders）。拉起前一律摘掉，App 才会落到 ~/.config/yhub。
+  # 在 /var/folders）。拉起前一律摘掉，App 才会落到 ~/.yhub。
   env -u YHUB_CONFIG_DIR -u YHUB_LANG -u YHUB_SETTINGS_FILE -u YHUB_PORT open "$DEST"
   READY=""
   for _ in $(seq 1 150); do
@@ -366,7 +366,7 @@ if [ "$RESTART" = 1 ]; then
       | python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("tools") or []))' 2>/dev/null || echo '?')"
     info "后端已就绪：http://127.0.0.1:$PORT/api/health version=${VER}，工具 ${TOOLS} 个"
   else
-    info "30s 内没等到 /api/health —— 看日志：~/.config/yhub/logs/desktop.log 与 backend.log"
+    info "30s 内没等到 /api/health —— 看日志：~/.yhub/logs/desktop.log 与 backend.log"
     info "（如果 8790 上本来就是你的开发后端，这条探活说明不了 App 的状态）"
   fi
 else

@@ -1,4 +1,4 @@
-// Settings: ~/.config/yhub/settings.json — versioned, defaulted local persistence
+// Settings: ~/.yhub/settings.json — versioned, defaulted local persistence
 //
 // Design conventions (the settings UI and the runtime both follow them)
 //
@@ -41,6 +41,9 @@ pub const DEFAULT_HOTKEY: &str = "Option+Space";
 /// Settings file name (inside the config directory)
 const SETTINGS_FILE: &str = "settings.json";
 
+/// The whole user-data root (`~/.yhub`): settings, state files, plugins, logs and the default capsule
+/// library. Hidden on purpose, and the only place Y-Hub writes outside `capsules_dir`.
+const CONFIG_DIR_NAME: &str = ".yhub";
 /// Config directory override (lower priority than SETTINGS_FILE; tests / multiple configs only)
 const ENV_CONFIG_DIR: &str = "YHUB_CONFIG_DIR";
 /// Settings file override (highest priority; verification scripts use it to avoid touching the real
@@ -306,10 +309,14 @@ impl Settings {
 
 // ---------------------------------------------------------------- paths and files
 
-/// Config directory: parent of `YHUB_SETTINGS_FILE` > `YHUB_CONFIG_DIR` > ~/.config/yhub
+/// Config directory: parent of `YHUB_SETTINGS_FILE` > `YHUB_CONFIG_DIR` > ~/.yhub
 ///
 /// The log directory also hangs off it (`backend.rs`'s `log_dir()`), so verification scripts using a
 /// temporary config directory also get their logs there and never touch the real user directory.
+///
+/// No migration of the old `~/.config/yhub` root: the project has no users to carry over yet, so a
+/// second code path that copies directories around on first start would be pure risk. Python's
+/// `config_dir()` has the same three fallbacks and the same (absent) migration.
 pub fn config_dir() -> PathBuf {
     if let Some(file) = env_path(ENV_SETTINGS_FILE) {
         if let Some(parent) = file.parent() {
@@ -318,15 +325,19 @@ pub fn config_dir() -> PathBuf {
             }
         }
     }
-    env_path(ENV_CONFIG_DIR).unwrap_or_else(|| {
-        dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join(".config")
-            .join("yhub")
-    })
+    if let Some(dir) = env_path(ENV_CONFIG_DIR) {
+        return dir;
+    }
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    default_config_dir(&home)
 }
 
-/// Settings file path: `YHUB_SETTINGS_FILE` > `YHUB_CONFIG_DIR`/settings.json > ~/.config/yhub/settings.json
+/// The default user-data root (`~/.yhub`); pure — no environment, no I/O.
+fn default_config_dir(home: &Path) -> PathBuf {
+    home.join(CONFIG_DIR_NAME)
+}
+
+/// Settings file path: `YHUB_SETTINGS_FILE` > `YHUB_CONFIG_DIR`/settings.json > ~/.yhub/settings.json
 pub fn settings_path() -> PathBuf {
     if let Some(file) = env_path(ENV_SETTINGS_FILE) {
         return file;
@@ -1175,7 +1186,12 @@ mod tests {
 
         std::env::remove_var(ENV_SETTINGS_FILE);
         std::env::remove_var(ENV_CONFIG_DIR);
-        assert!(settings_path().ends_with(".config/yhub/settings.json"));
+        // Default root name — asserted through the pure helper so a test never touches the
+        // developer's home directory.
+        assert_eq!(
+            default_config_dir(Path::new("/Users/example")),
+            PathBuf::from("/Users/example/.yhub")
+        );
     }
 
     // ------------------------------------------------------------ capsules_dir

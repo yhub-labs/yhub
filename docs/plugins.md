@@ -9,7 +9,7 @@ A plugin = one directory + `plugin.json` (declaration) + `plugin.py` (code). The
 | **core** | `yhub/server/adapters/<id>.py` (in the wheel) | never installable/removable; **disable only** (`plugins.<id>._enabled=false`) | `rclone`, `rss`, `scheduler` (the wall `dashboard` is a host capability, not a plugin) |
 | **non-core** | source: `yhub-labs/yhub-plugins`; effective copy: `<config>/plugins/<id>/` | `yhub plugin install/remove` | not shipped in this repo or the wheel |
 
-The config root is `YHUB_CONFIG_DIR` (default `~/.config/yhub`).
+The config root is `YHUB_CONFIG_DIR` (default `~/.yhub`).
 
 ```text
 <config>/plugins/<id>/
@@ -242,7 +242,7 @@ make dev-plugin PLUGIN=~/Projects/yhub-plugins/zdic        # backend on 8790, co
 cd web && npm run dev                                        # UI on 5173, proxies /api to 8790
 ```
 
-`scripts/dev-plugin.sh` symlinks the plugin directory into `build/dev-config/plugins/<id>` (gitignored, never `~/.config/yhub`), exports `YHUB_CONFIG_DIR` + `YHUB_LANG`, and runs uvicorn with `--reload` over the plugin directory plus `yhub/server/adapters`. Symlink instead of copy because a copy silently diverges from the checkout you are editing; `--reload-include '*.json'` because uvicorn only watches `*.py` by default and the catalogs are JSON.
+`scripts/dev-plugin.sh` symlinks the plugin directory into `build/dev-config/plugins/<id>` (gitignored, never `~/.yhub`), exports `YHUB_CONFIG_DIR` + `YHUB_LANG`, and runs uvicorn with `--reload` over the plugin directory plus `yhub/server/adapters`. Symlink instead of copy because a copy silently diverges from the checkout you are editing; `--reload-include '*.json'` because uvicorn only watches `*.py` by default and the catalogs are JSON.
 
 A broken manifest or a missing `@key` is fatal at startup by design, so the reload gives you the error instead of a half-new process. Stop the installed app first (it holds 8790), and check the two verifications that a plugin repository carries:
 

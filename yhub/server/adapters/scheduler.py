@@ -9,7 +9,7 @@ Placement follows the repository rules (AGENTS.md):
     displays.
 
 Write-endpoint boundary: "run now" is the only POST, and it **does not change config** -- the
-job list is File over app (``~/.config/yhub/schedule.json``); add jobs or change times by
+job list is File over app (``~/.yhub/schedule.json``); add jobs or change times by
 editing that file, and the edit takes effect on the next tick.
 """
 

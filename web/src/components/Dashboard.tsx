@@ -1580,7 +1580,7 @@ export default function Dashboard({
       {data && enabled.length === 0 && !error && (
         <CardState kind="empty">
           {t('dashboard.empty.noCellsPrefix')}
-          <code className="font-mono">~/.config/yhub/dashboard.json</code>
+          <code className="font-mono">~/.yhub/dashboard.json</code>
           {t('dashboard.empty.noCellsSuffix')}
         </CardState>
       )}

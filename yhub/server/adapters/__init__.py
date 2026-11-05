@@ -4,7 +4,7 @@ Two ways to add a tool (discovery uses the **same** function, ``discover_adapter
   1. Built-in: add a .py file under yhub/server/adapters/ exporting a TOOL_META dict
      (id/name/icon/description/ready/status + the three faces) -- yhub/server/main.py
      discovers and registers routes automatically; see AGENTS.md for the steps.
-  2. External: drop ``plugin.json`` + ``plugin.py`` into ``~/.config/yhub/plugins/<id>/``
+  2. External: drop ``plugin.json`` + ``plugin.py`` into ``~/.yhub/plugins/<id>/``
      (directory conventions, schema fields and the three rules are in docs/plugins.md).
      plugin.json is a JSON superset of TOOL_META (plus trust/enable sections); plugin.py
      only holds code hooks.
@@ -190,7 +190,7 @@ def discover_adapters() -> list[dict[str, Any]]:
     for mod in _iter_modules():          # built-in: real directory scan (plain files in the wheel too)
         _collect_meta(mod, adapters)
     adapters = [e for e in adapters if is_enabled(str(e["meta"].get("id", "")), enabled_map)]
-    for mod in iter_external_modules():  # external: ~/.config/yhub/plugins/<id>/
+    for mod in iter_external_modules():  # external: ~/.yhub/plugins/<id>/
         _collect_meta(mod, adapters)
     _check_face_clashes(adapters)
     _check_tiles(adapters)

@@ -5,13 +5,13 @@
 #   ./scripts/dev-plugin.sh ~/Projects/yhub-plugin-zdic
 #   ./scripts/dev-plugin.sh ~/Projects/yhub-plugins/memos --port 8791
 #
-# 为什么不是「复制进 ~/.config/yhub/plugins」再反复 `plugin install --force`：
+# 为什么不是「复制进 ~/.yhub/plugins」再反复 `plugin install --force`：
 #   * 复制之后你改的是仓库，跑的是副本，两边会不知不觉分叉；
 #   * 宿主对已加载的模块按 (路径, mtime, size) 缓存，但 **HTTP 路由绑定的是注册时的函数对象**，
 #     重新 import 不会换掉已注册的路由 —— 所以改代码要么重置注册表，要么重起进程。
 # 软链 + `--reload` 让「保存即重起」，路由、locales、manifest 一起重读，没有半新半旧的状态。
 #
-# 环境隔离：默认配置根是 build/dev-config（仓库内、gitignored），不会碰 ~/.config/yhub。
+# 环境隔离：默认配置根是 build/dev-config（仓库内、gitignored），不会碰 ~/.yhub。
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

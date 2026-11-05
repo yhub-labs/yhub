@@ -76,7 +76,7 @@ export const en = {
 
   'settings.config.title': 'Config file',
   'settings.config.desc':
-    'Every non-sensitive UI preference lives in this one file (secrets stay in ~/.config/yhub/.env, neither side reads the other). Writes are atomic; a broken file is backed up as .corrupt-<timestamp>.bak and the defaults are used instead, so nothing is lost.',
+    'Every non-sensitive UI preference lives in this one file (secrets stay in ~/.yhub/.env, neither side reads the other). Writes are atomic; a broken file is backed up as .corrupt-<timestamp>.bak and the defaults are used instead, so nothing is lost.',
   'settings.config.version': 'Settings version',
   'settings.config.versionHint': 'Only bumps when a field is removed, renamed or retyped; new fields do not touch it',
   'settings.config.path': 'File location',
@@ -223,7 +223,7 @@ export const zhCN = {
 
   'settings.config.title': '配置文件',
   'settings.config.desc':
-    '所有非敏感的界面偏好都写在这一个文件里（密钥仍只在 ~/.config/yhub/.env，两边互不读写）。写入是原子的；文件坏掉会先备份成 .corrupt-<时间戳>.bak 再按默认值运行，不会丢配置。',
+    '所有非敏感的界面偏好都写在这一个文件里（密钥仍只在 ~/.yhub/.env，两边互不读写）。写入是原子的；文件坏掉会先备份成 .corrupt-<时间戳>.bak 再按默认值运行，不会丢配置。',
   'settings.config.version': '设置版本',
   'settings.config.versionHint': '删字段 / 改名 / 改类型时才 +1；新增字段不用动它',
   'settings.config.path': '文件位置',

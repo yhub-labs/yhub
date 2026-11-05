@@ -8,7 +8,7 @@ export const en = {
     'The backend may be busy or stuck: retry in a moment. On desktop, check the status and logs under Settings → General → Backend bridge.',
   'api.network.title': 'Cannot reach the local backend ({path})',
   'api.network.hint.desktop':
-    'The desktop app first tries to start the installed yhub. If the backend is not installed, run in a terminal: uv tool install yhub (or make install-backend), then click "Check again". For details see ~/.config/yhub/logs/desktop.log',
+    'The desktop app first tries to start the installed yhub. If the backend is not installed, run in a terminal: uv tool install yhub (or make install-backend), then click "Check again". For details see ~/.yhub/logs/desktop.log',
   'api.network.hint.browser':
     'The backend may not be up yet or has already exited. In the browser, start it first with uv run yhub gui --no-open',
   'api.badResponse.title': 'Unexpected API response (HTTP {status}, the body is not JSON)',
@@ -34,7 +34,7 @@ export const zhCN = {
   'api.timeout.hint': '后端可能在忙或卡住了：稍后重试；桌面端可在「设置 → 通用 → 后端桥接」看状态与日志',
   'api.network.title': '连不上本地后端（{path}）',
   'api.network.hint.desktop':
-    '桌面端会先尝试拉起已安装的 yhub。没装后端时，在终端运行：uv tool install yhub（或 make install-backend），然后点「重新检测」。详细原因见 ~/.config/yhub/logs/desktop.log',
+    '桌面端会先尝试拉起已安装的 yhub。没装后端时，在终端运行：uv tool install yhub（或 make install-backend），然后点「重新检测」。详细原因见 ~/.yhub/logs/desktop.log',
   'api.network.hint.browser':
     '后端可能还没起来或已经退出。浏览器态请先跑 uv run yhub gui --no-open',
   'api.badResponse.title': '接口返回异常（HTTP {status}，响应不是 JSON）',

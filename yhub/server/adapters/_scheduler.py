@@ -1,6 +1,6 @@
 """Y-Hub scheduled-jobs core (cron-style scheduling).
 
-In one sentence: **read the job list in `~/.config/yhub/schedule.json`, keep a tick thread alive
+In one sentence: **read the job list in `~/.yhub/schedule.json`, keep a tick thread alive
 inside the backend process, run scripts as subprocesses when they are due, append every run to
 `runs.jsonl`, and expose state for the dashboard and the panel.**
 

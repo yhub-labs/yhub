@@ -2,7 +2,7 @@
 
 Mount remotes that already exist in the rclone config (crypt included) as local directories, and watch **the mount itself**: is it still in the mount table, is the process alive, can the root be read. `~/.config/rclone/rclone.conf` (or `$RCLONE_CONFIG`) is the only credential source and is **read-only, never written**.
 
-Code: `yhub/cli/rclone.py` (all logic + CLI), `yhub/cli/rclone_obscure.py` (obscuring), `yhub/server/adapters/rclone.py` (HTTP / MCP / CLI faces + the `rclone.mounts` wall cell), `web/src/components/Rclone.tsx` (panel). Our state lives in `<config root>/rclone.state.json` (config root = parent of `YHUB_SETTINGS_FILE` > `YHUB_CONFIG_DIR` > `~/.config/yhub`) and contains **no password**. Mount points default to `~/<remote>` and can be overridden per mount; one remote mounts to one point at a time.
+Code: `yhub/cli/rclone.py` (all logic + CLI), `yhub/cli/rclone_obscure.py` (obscuring), `yhub/server/adapters/rclone.py` (HTTP / MCP / CLI faces + the `rclone.mounts` wall cell), `web/src/components/Rclone.tsx` (panel). Our state lives in `<config root>/rclone.state.json` (config root = parent of `YHUB_SETTINGS_FILE` > `YHUB_CONFIG_DIR` > `~/.yhub`) and contains **no password**. Mount points default to `~/<remote>` and can be overridden per mount; one remote mounts to one point at a time.
 
 ## Actions
 

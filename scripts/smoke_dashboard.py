@@ -8,7 +8,7 @@
   * 3 条负例：400（参数非法）、404（不存在的格子）、405（写方法）
   * 契约级判据：11 个进屏字段齐全、三态与 staleness 枚举合法、R2（源不可达 ≠ ok）、
     R7（source 里不带查询串/用户信息）、适配器自动注册进 /api/tools
-  * 快照真的落进了 ``YHUB_DASHBOARD_DIR``（临时目录，**不碰 ~/.config/yhub**）
+  * 快照真的落进了 ``YHUB_DASHBOARD_DIR``（临时目录，**不碰 ~/.yhub**）
 
 后端由本脚本自己起（``uv run yhub gui --no-open --port <随机空闲端口>``），
 跑完自己收干净。需要 ``web/dist`` 存在（uv 打包的 force-include 硬要求，见 docs/packaging.md）。
@@ -143,11 +143,11 @@ def main() -> int:
     (workdir / "dashboard.json").write_text(
         json.dumps(smoke_config, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    # 运行前后各看一眼真实用户目录，证明这一轮没有写到 ~/.config/yhub
+    # 运行前后各看一眼真实用户目录，证明这一轮没有写到 ~/.yhub
     user_snapshot = Path.home() / ".config" / "yhub" / "dashboard" / "snapshots.jsonl"
     user_snapshot_stat = _stat_of(user_snapshot)
 
-    print(f"配置/快照目录（临时，不碰 ~/.config/yhub）：{workdir}")
+    print(f"配置/快照目录（临时，不碰 ~/.yhub）：{workdir}")
     print(f"后端：{base}\n")
 
     log_handle = log_path.open("w", encoding="utf-8")
@@ -405,7 +405,7 @@ def main() -> int:
         # ---- 落盘位置 -----------------------------------------------------
         snap_path = workdir / "dashboard" / "snapshots.jsonl"
         check("快照落在 YHUB_DASHBOARD_DIR/dashboard/snapshots.jsonl", snap_path.is_file(), str(snap_path))
-        check("真实用户目录 ~/.config/yhub/dashboard 这一轮没被动过",
+        check("真实用户目录 ~/.yhub/dashboard 这一轮没被动过",
               _stat_of(user_snapshot) == user_snapshot_stat,
               f"{user_snapshot} 运行前后不一致")
 

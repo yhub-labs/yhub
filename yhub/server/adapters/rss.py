@@ -10,7 +10,7 @@ Why the wall cells are a **dynamic producer** (``presentation.tiles`` as a calla
 subscription means one cell, so N subscriptions means N cells. Add an entry to ``rss.json``
 and the next ``/api/dashboard/cells`` fetch gains a cell -- no restart, no frontend change.
 
-Config follows File over app: ``~/.config/yhub/rss.json``. API and CLI write the same file
+Config follows File over app: ``~/.yhub/rss.json``. API and CLI write the same file
 (tmp + ``os.replace`` atomic swap), so hand edits and panel edits do not conflict.
 """
 

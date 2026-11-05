@@ -1,7 +1,7 @@
 // Y-Hub desktop client (Tauri host)
 //
 // Responsibilities:
-//   1. Register global hotkeys (Option+Space by default, editable in the UI, stored in ~/.config/yhub/settings.json)
+//   1. Register global hotkeys (Option+Space by default, editable in the UI, stored in ~/.yhub/settings.json)
 //   2. Keep a persistent menu bar status item (tray): left click toggles the panel, right click opens
 //      a menu (show/hide/quit) — see tray.rs
 //   3. Auto-hide on blur (unless pinned); closing the window only hides it, never quits

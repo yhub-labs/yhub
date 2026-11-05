@@ -151,7 +151,7 @@ Until then the honest position is: **source + wheel are the supported install; t
 
 | Symptom | Check |
 | --- | --- |
-| App up, UI says "backend not ready" | `source=…` line in `~/.config/yhub/logs/desktop.log`, child output in `backend.log` |
+| App up, UI says "backend not ready" | `source=…` line in `~/.yhub/logs/desktop.log`, child output in `backend.log` |
 | `source=installed` but stale version | `command -v yhub`, `yhub --version`; run `make install-backend` after code changes |
 | Backend not found / port 8790 held | install `yhub` or set `YHUB_BACKEND_BIN`; `lsof -nP -iTCP:8790 -sTCP:LISTEN` (`make install` sweeps it) |
 | Frontend changes invisible / `Forced include not found` | rebuild with `make app` (embedded at compile time); run `make web` and `make capsules` |

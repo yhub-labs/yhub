@@ -50,7 +50,7 @@ Frontend development: run `uv run yhub gui --dev` in one terminal and `cd web &&
 | `yhub plugin list\|install\|remove\|enable\|disable` | core plugins (shipped, disable-only) and third-party plugins |
 | `yhub completion zsh` | shell completion, rendered from the parsed command tree |
 
-Commands declared by core plugins (`rclone`, `rss`, `schedule`) and by whatever third-party plugins are installed on this machine appear in `yhub --help` automatically. The desktop shell binds `Option+Space` to summon the launcher; `make install` places `/Applications/Y-Hub.app`. Config is one file, `~/.config/yhub/settings.json`, written through the web settings page (`/?view=settings`) or the desktop settings — see [`docs/config.md`](https://github.com/yhub-labs/yhub/blob/main/docs/config.md).
+Commands declared by core plugins (`rclone`, `rss`, `schedule`) and by whatever third-party plugins are installed on this machine appear in `yhub --help` automatically. The desktop shell binds `Option+Space` to summon the launcher; `make install` places `/Applications/Y-Hub.app`. Config is one file, `~/.yhub/settings.json`, written through the web settings page (`/?view=settings`) or the desktop settings — see [`docs/config.md`](https://github.com/yhub-labs/yhub/blob/main/docs/config.md).
 
 ## Extension points
 

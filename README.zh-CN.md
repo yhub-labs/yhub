@@ -50,7 +50,7 @@ MCP 客户端接入：
 | `yhub plugin list\|install\|remove\|enable\|disable` | 核心插件（随包分发，只能禁用）与第三方插件 |
 | `yhub completion zsh` | 从命令解析树生成的 shell 补全 |
 
-核心插件（`rclone`、`rss`、`schedule`）以及本机装好的第三方插件声明的命令会自动出现在 `yhub --help` 里。桌面壳默认用 `Option+Space` 唤起启动器；`make install` 会装好 `/Applications/Y-Hub.app`。配置只有一份文件 `~/.config/yhub/settings.json`，通过网页设置页（`/?view=settings`）或桌面设置写入——见 [`docs/config.md`](https://github.com/yhub-labs/yhub/blob/main/docs/config.md)。
+核心插件（`rclone`、`rss`、`schedule`）以及本机装好的第三方插件声明的命令会自动出现在 `yhub --help` 里。桌面壳默认用 `Option+Space` 唤起启动器；`make install` 会装好 `/Applications/Y-Hub.app`。配置只有一份文件 `~/.yhub/settings.json`，通过网页设置页（`/?view=settings`）或桌面设置写入——见 [`docs/config.md`](https://github.com/yhub-labs/yhub/blob/main/docs/config.md)。
 
 ## 扩展点
 

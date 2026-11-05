@@ -1,5 +1,5 @@
 // Menu bar status item (tray) — Raycast-style interaction, behavior fully driven by the
-// `~/.config/yhub/settings.json` `tray.*` settings (see TraySettings in config.rs):
+// `~/.yhub/settings.json` `tray.*` settings (see TraySettings in config.rs):
 //
 //   close_behavior     on window close: hide = only hide (process stays in the menu bar) / quit = exit
 //   left_click         left single click: toggle_panel / show_menu / none

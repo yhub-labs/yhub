@@ -12,8 +12,8 @@
 // 用法（不依赖已起的后端；自己挑空闲口拉一个测试后端，绝不碰 8790 装机版）：
 //     cd web && node verify-plugins.mjs        # 或 make verify-plugins
 //
-// 会临时动 ~/.config/yhub/plugins/example-plugin（已存在则先挪开、收尾还原），
-// 基线期会把本机装着的全部第三方插件挪到 ~/.config/yhub/.pre-verify-parked 再还原。
+// 会临时动 ~/.yhub/plugins/example-plugin（已存在则先挪开、收尾还原），
+// 基线期会把本机装着的全部第三方插件挪到 ~/.yhub/.pre-verify-parked 再还原。
 // **不要**在设置了 YHUB_CONFIG_DIR / YHUB_SETTINGS_FILE 的 shell 里跑（脚本会拒绝启动）。
 
 import { spawn, spawnSync } from 'node:child_process'

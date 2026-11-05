@@ -10,7 +10,7 @@ Three design choices (read before changing anything here):
 1. **Standard library parsing only** (``xml.etree.ElementTree``). RSS 2.0 / RDF(RSS 1.0) / Atom
 differ only in tag names and where the link sits, which a few hundred lines cover; pulling in
 a feedparser dependency would complicate both install size and "does it run offline".
-2. **Config is File over app** (``~/.config/yhub/rss.json``): adding feeds and changing addresses
+2. **Config is File over app** (``~/.yhub/rss.json``): adding feeds and changing addresses
    can be done by editing the file; the API/CLI are just another entry point to it (writes go
    through tmp + ``os.replace`` for an atomic swap).
 3. **Fetching is bounded**: 2 MiB body, 6 second timeout, capped item count. One broken 500 MB
@@ -62,7 +62,7 @@ def base_dir() -> Path:
     """Config root: ``YHUB_RSS_DIR`` (tests) → the shared root from ``settings.config_dir()``.
 
     The shared root is what ``YHUB_CONFIG_DIR`` / ``YHUB_SETTINGS_FILE`` control; falling back to
-    ``~/.config/yhub`` here would read the developer's real ``rss.json`` during acceptance runs.
+    ``~/.yhub`` here would read the developer's real ``rss.json`` during acceptance runs.
     """
     raw = os.environ.get("YHUB_RSS_DIR", "").strip()
     if raw:

@@ -68,7 +68,7 @@ EN = {
     "rss.item_untitled": "(untitled)",
     # wall cell rss.<feed>
     "rss.cell_feed_gone": "This subscription was removed from rss.json ({feed_id})",
-    "rss.cell_feed_gone_hint": "Refresh this cell; or delete this entry from ~/.config/yhub/rss.json",
+    "rss.cell_feed_gone_hint": "Refresh this cell; or delete this entry from ~/.yhub/rss.json",
     "rss.cell_no_items": "This feed has no items",
     "rss.cell_summary": "items: {count} · {title}",
     # CLI face
@@ -90,11 +90,11 @@ EN = {
     "scheduler.unknown": "unknown",
     "scheduler.job_not_found": "No such job: {job_id}",
     "scheduler.job_not_found_hint": (
-        "Use GET /api/scheduler/jobs to see the jobs; add one by editing ~/.config/yhub/schedule.json"
+        "Use GET /api/scheduler/jobs to see the jobs; add one by editing ~/.yhub/schedule.json"
     ),
     "scheduler.limit_invalid": "Unsupported limit: {limit}",
     "scheduler.limit_hint": "limit must be an integer in 1~200",
-    "scheduler.not_ready_hint": "Change the command / cwd of this job in ~/.config/yhub/schedule.json",
+    "scheduler.not_ready_hint": "Change the command / cwd of this job in ~/.yhub/schedule.json",
     "scheduler.busy_hint": "Wait for this run to finish, or check the run history",
     "scheduler.start_failed": "「{title}」 did not start: {error}",
     "scheduler.start_failed_hint": "See that line in the server log",
@@ -134,11 +134,11 @@ EN = {
     # job_view() -> wall cell cron.<job>
     "scheduler.cell.schedule_off": "Scheduling is off (enabled=false in schedule.json)",
     "scheduler.cell.schedule_off_hint": (
-        "Set enabled back to true in ~/.config/yhub/schedule.json, or delete that key"
+        "Set enabled back to true in ~/.yhub/schedule.json, or delete that key"
     ),
     "scheduler.cell.job_disabled": "Job is disabled ({schedule})",
     "scheduler.cell_job_gone": "The job list no longer contains {job_id}",
-    "scheduler.cell_job_gone_hint": "After editing ~/.config/yhub/schedule.json, refresh this cell",
+    "scheduler.cell_job_gone_hint": "After editing ~/.yhub/schedule.json, refresh this cell",
     "scheduler.cell.never_ran": "Never ran · {schedule} · next {when}",
     "scheduler.cell.run_ok": "{verb} run succeeded · took {duration}",
     "scheduler.cell.failed": "{kind} ({detail})",
@@ -250,7 +250,7 @@ ZH = {
     "rss.retry_later": "稍后重试",
     "rss.item_untitled": "(无标题)",
     "rss.cell_feed_gone": "这个订阅已经从 rss.json 里删掉了（{feed_id}）",
-    "rss.cell_feed_gone_hint": "刷新这一格；或删掉 ~/.config/yhub/rss.json 里这条",
+    "rss.cell_feed_gone_hint": "刷新这一格；或删掉 ~/.yhub/rss.json 里这条",
     "rss.cell_no_items": "这个源没有条目",
     "rss.cell_summary": "{count} 条 · {title}",
     "rss.cli_list_header": "订阅 {total} 个（配置：{path}）",
@@ -270,10 +270,10 @@ ZH = {
     "scheduler.backend_error_hint": "看服务端日志里这一行（响应里不带异常栈）",
     "scheduler.unknown": "未知",
     "scheduler.job_not_found": "没有这个任务：{job_id}",
-    "scheduler.job_not_found_hint": "用 GET /api/scheduler/jobs 看有哪些任务；加任务改 ~/.config/yhub/schedule.json",
+    "scheduler.job_not_found_hint": "用 GET /api/scheduler/jobs 看有哪些任务；加任务改 ~/.yhub/schedule.json",
     "scheduler.limit_invalid": "不支持的 limit：{limit}",
     "scheduler.limit_hint": "limit 必须是 1~200 的整数",
-    "scheduler.not_ready_hint": "改 ~/.config/yhub/schedule.json 里这条任务的 command / cwd",
+    "scheduler.not_ready_hint": "改 ~/.yhub/schedule.json 里这条任务的 command / cwd",
     "scheduler.busy_hint": "等这一次跑完再点，或看运行历史",
     "scheduler.start_failed": "「{title}」没跑起来：{error}",
     "scheduler.start_failed_hint": "看服务端日志里这一行",
@@ -305,10 +305,10 @@ ZH = {
     "scheduler.run.spawn_failed": "启不动：{error}",
     "scheduler.run.start_failed": "启动失败：{error}",
     "scheduler.cell.schedule_off": "调度已关闭（schedule.json 里 enabled=false）",
-    "scheduler.cell.schedule_off_hint": "把 ~/.config/yhub/schedule.json 的 enabled 改回 true，或删掉这个键",
+    "scheduler.cell.schedule_off_hint": "把 ~/.yhub/schedule.json 的 enabled 改回 true，或删掉这个键",
     "scheduler.cell.job_disabled": "任务已关闭（{schedule}）",
     "scheduler.cell_job_gone": "任务表里已经没有 {job_id} 了",
-    "scheduler.cell_job_gone_hint": "改完 ~/.config/yhub/schedule.json 后刷新这一格",
+    "scheduler.cell_job_gone_hint": "改完 ~/.yhub/schedule.json 后刷新这一格",
     "scheduler.cell.never_ran": "还没跑过 · {schedule} · 下次 {when}",
     "scheduler.cell.run_ok": "{verb}运行成功 · 用时 {duration}",
     "scheduler.cell.failed": "{kind}（{detail}）",
