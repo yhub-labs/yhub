@@ -99,9 +99,7 @@ Rules the loader enforces at startup (a bad declaration is red, never a dead pag
 
 Serving is gated on the **loaded** plugin set, not on the directory: a plugin marked `disabled` leaves its files in place, and its panel must disappear with its tool. Every "no screen here" case — unknown id, installed but not loaded, no declaration, file deleted after install — answers **404**, so a script can tell "gone" from "the host broke".
 
-Two plugins ship panels today: [zdic](https://github.com/yhub-labs/yhub-plugin-zdic) (character lookup, `?q=` deep links) and [memos](https://github.com/yhub-labs/yhub-plugin-memos) (your memos by day, with a compose box). Both are single HTML files with no build step.
-
-The old React panels for `zdic` / `memos` / `gemini` remain in `yhub-labs/yhub-plugins/<id>/panel/` as reference implementations; they import host modules and do not build standalone. A plugin that wants a real screen should ship a single HTML file instead.
+Two plugins ship panels today — both live in [yhub-labs/yhub-plugins](https://github.com/yhub-labs/yhub-plugins): [zdic](https://github.com/yhub-labs/yhub-plugins/tree/main/zdic) (character lookup, `?q=` deep links) and [memos](https://github.com/yhub-labs/yhub-plugins/tree/main/memos) (your memos by day, with a compose box). Both are single HTML files with no build step, and the index's `subdir` is what points at one plugin inside that repository.
 
 `cells.<id>.*` in `dashboard.json` always wins last (`enabled/zone/order/title/href/stale_after/critical` + same-named `params` keys).
 
@@ -240,7 +238,7 @@ Two things make a plugin look "live" and each is worth knowing separately:
 So the loop is "save → process restart", and the only question is making that restart automatic and isolated:
 
 ```bash
-make dev-plugin PLUGIN=~/Projects/yhub-plugin-zdic          # backend on 8790, config root build/dev-config
+make dev-plugin PLUGIN=~/Projects/yhub-plugins/zdic        # backend on 8790, config root build/dev-config
 cd web && npm run dev                                        # UI on 5173, proxies /api to 8790
 ```
 

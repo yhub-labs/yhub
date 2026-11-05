@@ -48,7 +48,7 @@ open-app:
 	@echo "已拉起 /Applications/Y-Hub.app（不继承 YHUB_* 隔离变量）"
 
 # 本地开发插件：把插件目录软链进 build/dev-config，起一个 --reload 后端（改 plugin.py / locales 自动重起）。
-#   make dev-plugin PLUGIN=~/Projects/yhub-plugin-zdic [PORT=8790]
+#   make dev-plugin PLUGIN=~/Projects/yhub-plugins/zdic [PORT=8790]
 dev-plugin:
 	./scripts/dev-plugin.sh "$(PLUGIN)" $(if $(PORT),--port $(PORT),)
 
