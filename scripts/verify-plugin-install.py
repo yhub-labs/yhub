@@ -124,7 +124,6 @@ def main() -> int:
     result = pm.install_spec(str(src), force=True)
     check("宿主重建失败时如实报 restart_required", result["restart_required"] is True, repr(result))
     pm.remove_plugin("regdemo")
-
     # 兼容性门禁
     bad = make_plugin(version="9.0.0", min_yhub="99.0.0")
     bad_archive = make_tar(bad)
@@ -142,6 +141,55 @@ def main() -> int:
     check("GitHub spec 解析 tag + subdir", gh == {"owner": "owner", "repo": "repo", "ref": "v1.2.3", "subdir": "sub/dir"}, repr(gh))
     check("GitHub URL 解析", pm.parse_github_spec("https://github.com/owner/repo")["repo"] == "repo")
     check("普通 id 不当 GitHub", pm.parse_github_spec("zdic") is None)
+
+    # ---- registry 条目靠 repo + subdir 指向 monorepo 里的一个插件 ----
+    # 症状：装 zdic 时把仓库根当成插件根，于是装了 chrome-doctor（id 不符）或报「没有 plugin.json」。
+    # 回归点是 subdir 必须并进解析结果，而不是只解析 `repo` 字符串。
+    monorepo = TMP / "monorepo"
+    mono_plugin = monorepo / "regdemo"
+    mono_plugin.mkdir(parents=True, exist_ok=True)
+    (mono_plugin / "plugin.json").write_text(json.dumps({
+        "schema": 2, "id": "regdemo", "name": "注册表示例", "icon": "plugin",
+        "description": "离线验收用", "trust": "full", "kind": "third-party",
+        "version": "1.0.0", "min_yhub": "0.1.0", "author": "test",
+    }, ensure_ascii=False), encoding="utf-8")
+    (mono_plugin / "plugin.py").write_text("TOOL_META = {}\n", encoding="utf-8")
+    (mono_plugin / "from-subdir.txt").write_text("yes\n", encoding="utf-8")
+    (monorepo / "README.md").write_text("monorepo\n", encoding="utf-8")
+    # 第二个插件目录是关键：只放一个时「取第一个带 plugin.json 的子目录」会兜住 bug，
+    # 两个目录才会露出「装错了兄弟插件」的真实症状。
+    (monorepo / "aardvark").mkdir(parents=True, exist_ok=True)
+    (monorepo / "aardvark" / "plugin.json").write_text(json.dumps({
+        "schema": 2, "id": "aardvark", "name": "另一个插件", "icon": "plugin",
+        "description": "离线验收用", "trust": "full", "kind": "third-party",
+        "version": "1.0.0", "min_yhub": "0.1.0", "author": "test",
+    }, ensure_ascii=False), encoding="utf-8")
+    (monorepo / "aardvark" / "plugin.py").write_text("TOOL_META = {}\n", encoding="utf-8")
+    blob = TMP / "monorepo.tar.gz"
+    with tarfile.open(blob, "w:gz") as tf:
+        tf.add(monorepo, arcname="yhub-plugins-regdemo-v1.0.0")
+
+    registry.write_text(json.dumps({"schema": 1, "plugins": [{
+        "id": "regdemo", "name": "注册表示例", "description": "离线验收用",
+        "version": "1.0.0", "min_yhub": "0.1.0",
+        "repo": "owner/yhub-plugins", "subdir": "regdemo", "ref": "regdemo-v1.0.0",
+    }]}, ensure_ascii=False), encoding="utf-8")
+    pm.fetch_registry(refresh=True)  # 先把 registry 读进缓存，下面才敢把下载换成离线 tarball
+
+    real_read_url, real_github_ref = pm._read_url, pm._github_ref
+    pm._read_url = lambda url: Path(blob).read_bytes()
+    pm._github_ref = lambda owner, repo, requested="": requested or "regdemo-v1.0.0"
+    try:
+        result = pm.install_spec("regdemo", force=True)
+    except pm.PluginError as exc:
+        result = {"error": exc.message}
+    finally:
+        pm._read_url, pm._github_ref = real_read_url, real_github_ref
+    dest = pm.L.plugins_dir() / "regdemo"
+    check("registry 的 repo+subdir 从子目录安装",
+          result["id"] == "regdemo" and (dest / "from-subdir.txt").is_file(),
+          f"{result!r} {sorted(p.name for p in dest.iterdir()) if dest.is_dir() else 'no dir'}")
+    pm.remove_plugin("regdemo")
 
     print(f"\n{passed}/{passed + failed} 通过")
     return 0 if failed == 0 else 1

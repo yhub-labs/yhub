@@ -614,6 +614,10 @@ def _install_spec(spec: str, *, force: bool = False, ref: str = "",
         if parsed is None:
             raise PluginError(tr("plugins.err.registry_repo_invalid", id=entry["id"],
                                  repo=entry["repo"]))
+        # A monorepo index points at one plugin with `subdir`; the spec string carries no `#subdir`,
+        # so without this merge the archive is unpacked from the repository root and install fails
+        # with "no plugin.json" (or, worse, installs whatever sits at the root).
+        parsed["subdir"] = parsed.get("subdir") or str(entry.get("subdir") or "")
         return _install_github(parsed, force=force,
                                ref=entry.get("ref") or "", expected_id=entry["id"],
                                source="registry", spec=spec, registry_id=entry["id"])
