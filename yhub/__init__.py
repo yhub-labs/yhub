@@ -9,6 +9,6 @@ via ``[tool.hatch.version] path = "yhub/__init__.py"``, runtime uses
 ``yhub.__version__``. Bump the version here only.
 """
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 
 __all__ = ["__version__"]
