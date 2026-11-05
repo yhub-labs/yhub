@@ -234,7 +234,7 @@ await page.addInitScript(() => {
         case 'get_settings_schema':
           return clone(SCHEMA)
         case 'get_settings_path':
-          return '/Users/example/.config/yhub/settings.json'
+          return '/Users/example/.yhub/settings.json'
         case 'get_hotkey':
           return state.hotkeys.toggle_panel ?? ''
         case 'set_hotkey': {
@@ -276,7 +276,7 @@ await page.addInitScript(() => {
     if (url.includes('/api/settings') && method === 'GET') {
       return new Response(JSON.stringify({
         ok: true,
-        path: '/Users/example/.config/yhub/settings.json',
+        path: '/Users/example/.yhub/settings.json',
         settings: state,
         schema: SCHEMA,
         warnings: [],
@@ -342,7 +342,7 @@ try {
   check('读取：设置版本来自 get_settings', /v1/.test(text), text.split('\n')[0])
   check(
     '读取：配置文件路径来自 get_settings_path',
-    /\/Users\/example\/\.config\/yhub\/desktop\.json/.test(text),
+    /\/Users\/example\/\.yhub\/settings\.json/.test(text),
   )
   check('读取：热键按组合键格式化显示（⌘ ⇧ K）', /⌘ ⇧ K/.test(text))
   check('读取：托盘行为按枚举文案显示（弹出菜单 / 退出程序）', /弹出菜单/.test(text) && /退出程序/.test(text))

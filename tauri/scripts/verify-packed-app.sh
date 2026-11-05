@@ -20,7 +20,7 @@
 #   * 本脚本                             —— 看「装完的 App」：落点/签名/体积/已安装后端真被用上/
 #                                          冷启动耗时/真业务数据/切前后台/网络异常/退出不留孤儿
 #
-# 安全性：所有用例都用 YHUB_CONFIG_DIR 指向临时目录（绝不读写 ~/.config/yhub/），
+# 安全性：所有用例都用 YHUB_CONFIG_DIR 指向临时目录（绝不读写 ~/.yhub/），
 # 端口一律用随机空闲端口（不碰开发机上常驻的 8790 后端）。
 #
 # 静默启动：所有用例默认带 YHUB_SELFTEST_HIDDEN=1（App 不显示面板、不注册全局热键），
@@ -71,6 +71,12 @@ grep1() { grep -oE -- "$2" "$1" 2>/dev/null | head -1; }
 
 PY="$(command -v python3)"
 [ -n "$PY" ] || { echo "找不到 python3" >&2; exit 1; }
+
+# 后端自报的版本来自这棵树（yhub/__init__.py 是唯一真源）。原来这里写死过 0.4.0，
+# 版本一变这两条断言就永远红 —— 断言的是「自报版本 == 这棵树的版本」，不是某个字面量。
+TREE_VERSION="$(grep -m1 '^__version__' "$REPO_ROOT/yhub/__init__.py" | cut -d'"' -f2)"
+TREE_VERSION_RE="$(printf '%s' "$TREE_VERSION" | sed 's/\./\\./g')"
+[ -n "$TREE_VERSION" ] || { echo "读不到 yhub/__init__.py 的 __version__" >&2; exit 1; }
 
 # 本脚本自己起的进程（退出时兜底清理，绝不留下孤儿）
 APP_PIDS=""
@@ -219,9 +225,10 @@ if [ -n "$TP_IN_APP" ] && [ -f "$TP_SRC" ]; then
   check "包内 THIRD-PARTY.md == 仓库根那份（sha256）" \
     "$(shasum -a 256 "$TP_SRC" | awk '{print $1}')" \
     "$(shasum -a 256 "$TP_IN_APP" | awk '{print $1}')"
-  # 图标已改为自绘（2026-11）：断言从「Reicon 版权行」换成「图标自绘声明 + 许可文件头」
+  # 图标声明按 THIRD-PARTY.md 里真实存在的那句话断言（英文原文 + 仓库内的绘制源目录）
   check "包内 THIRD-PARTY.md 带着图标自绘声明" yes \
-    "$(has "$TP_IN_APP" 'Y-Hub 自绘')"
+    "$(grep -q 'original artwork drawn in this repository' "$TP_IN_APP" &&
+       grep -q 'No third-party icon set is used' "$TP_IN_APP" && echo yes || echo no)"
 LIC_IN_APP="$(find "$APP/Contents/Resources" -maxdepth 2 -name 'LICENSE' -type f -print -quit)"
 check "MIT LICENSE 随包分发（许可义务）" yes \
   "$([ -n "$LIC_IN_APP" ] && echo yes || echo no)"
@@ -332,7 +339,7 @@ DESKTOP_LOG="$COLD_CFG/logs/desktop.log"
 check "用的是显式指定的 yhub（source=external，不是机器上随机一个旧版）" yes \
   "$(has "$COLD_LOG" "\[backend\] 拉起后端：.*source=external, port=$PORT1")"
 check "桥接层记下了就绪（pid + 版本 + 首次响应耗时）" yes \
-  "$(has "$COLD_LOG" '\[backend\] 后端就绪：pid=[0-9]+ source=external version=0\.4\.0 首次响应 [0-9]+ ms')"
+  "$(has "$COLD_LOG" "\\[backend\\] 后端就绪：pid=[0-9]+ source=external version=$TREE_VERSION_RE 首次响应 [0-9]+ ms")"
 check "子进程 stdout/stderr 进了后端日志（可定位）" yes "$(has "$BACKEND_LOG" 'Uvicorn running on http://127\.0\.0\.1:'$PORT1)"
 check "桌面端日志落盘（带时间戳）" yes "$(has "$DESKTOP_LOG" '^\[20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9:]{8}\] 拉起后端：')"
 
@@ -454,7 +461,7 @@ common_selftest_checks "应用自检" "$APP_LOG"
 S="$APP_LOG"
 check "自检：拉起并探活成功" yes "$(has "$S" 'ensure_running 拉起并探活成功: got=true want=true OK')"
 check "自检：来源是显式指定的 yhub（source=external）" yes "$(has "$S" 'ensure_running: .*source=external .*owned=true')"
-check "自检：/api/health 拿到后端自报版本（不是本地常量）" yes "$(has "$S" 'health: ok=true version=Some\("0\.4\.0"\)')"
+check "自检：/api/health 拿到后端自报版本（不是本地常量）" yes "$(has "$S" "health: ok=true version=Some\\(\"$TREE_VERSION_RE\"\\)")"
 EXPECTED_TOOL_COUNT="$(cat "$TMP/expected-tools.txt" 2>/dev/null || echo 0)"
 check "自检：真实业务接口 /api/tools 拿到 ${EXPECTED_TOOL_COUNT} 个工具（与端到端清单同数）" yes "$(has "$S" "health: .*tools=Some\\(${EXPECTED_TOOL_COUNT}\\)")"
 check "自检：崩溃后下一次调用自动重新拉起（自愈）" yes "$(has "$S" '崩溃后下一次调用自动重新拉起（自愈）: got=true want=true OK')"
