@@ -84,7 +84,11 @@ app's). The main app CSP lacks `'unsafe-eval'` while single-file capsules common
 kernel via `eval` — the typical symptom is a TiddlyWiki page that opens but half-dies
 (`Internal JavaScript Error: … 'unsafe-eval' is not an allowed source`). Hosted pages are **files you
 put in your own library**, on loopback only, equivalent to opening a local HTML file in your browser
-(`file://` has no CSP at all), so the policy is relaxed to that standard.
+(`file://` has no CSP at all), so the policy is relaxed to that standard: the capsule's own folder
+plus `https:` everywhere it can load something, **including `frame-src`** (TiddlyWiki's plugin
+library is a cross-origin iframe; without `https:` there it loads, reports `loaded`, and lists
+nothing). `http:` is never allowed in `frame-src` — an unauthenticated loopback service framed into
+the user's window is the one thing this policy is still holding.
 
 **Boundaries** (all asserted in `packaging/verify-backend.sh`)
 
@@ -148,6 +152,16 @@ _TAURI_ORIGINS = {"tauri://localhost", "http://tauri.localhost"}
 # fails in a very quiet way: the script is blocked → global undefined → the page looks fine while
 # sending throws silently at the render step. style/img/font/media/connect already allowed https:;
 # script-src is aligned with them. Run web/smoke.mjs before changing this.
+#
+# frame-src carries https: too (2026-11). Fetching remote bytes and *executing* remote code were
+# already allowed, so a cross-origin frame is the strictly weaker capability: same-origin policy
+# keeps it out of the capsule's DOM / storage, and `/api/*` refuses capsule referers regardless.
+# Denying it was an inconsistency, not a boundary — and it broke real apps silently: TiddlyWiki 5.4
+# loads its official plugin library by appending a hidden `<iframe src="https://tiddlywiki.com/
+# library/<ver>/index.html">` and talking to it over postMessage (`browser-messaging.js`); blocked
+# by frame-src the iframe still reports `loaded`, so the plugin list is simply empty (no error the
+# user can see) while `$:/temp/RemoteAssetInfo/*` stays at 0. `http:` stays out on purpose: framing
+# an unauthenticated loopback service would hand it the user's window.
 def _scope_prefixes(scope: str | None) -> list[str]:
     """A capsule's own folder in URL space (used by the CSP).
 
@@ -166,7 +180,8 @@ def page_csp(request: Request, scope: str | None) -> str:
     """Build the CSP for a capsule's folder scope: **only its own folder**, never the whole `'self'`.
 
     - `connect-src` / `script-src` / `img-src` / `frame-src` are pinned to this capsule's URL prefixes;
-    - `https:` stays allowed (CDN scripts and external AI endpoints are the capsule's own business);
+    - `https:` stays allowed (CDN scripts, external AI endpoints and embedded app frames are the
+      capsule's own business — `http:` never is, see the comment above `_scope_prefixes`);
     - `form-action 'none'` blocks forms aimed straight at the host `/api`;
     - `'self'` is never emitted: other capsules on the same origin and `/api/*` stay out of the set.
 
@@ -194,13 +209,15 @@ def page_csp(request: Request, scope: str | None) -> str:
         f"font-src {own} data: https:; "
         f"media-src {own} data: blob: https:; "
         f"connect-src {own} https:; "
-        f"frame-src {own} data: blob:; "
+        f"frame-src {own} https: data: blob:; "
         f"worker-src {own} blob: data:; "
         "object-src 'none'; form-action 'none'; base-uri 'none'"
     )
 
 
-# Conservative default for callers that do not have a request or capsule scope.
+# Conservative default for callers that do not have a request or capsule scope (no frame prefixes
+# exist here, so frame-src is scheme-level only — same as page_csp, which adds the capsule's own
+# prefixes in front of it).
 APP_CSP = (
     "default-src 'none'; "
     "script-src 'unsafe-inline' 'unsafe-eval' blob: data: https:; "
@@ -209,7 +226,7 @@ APP_CSP = (
     "font-src data: https:; "
     "media-src data: blob: https:; "
     "connect-src https:; "
-    "frame-src data: blob:; "
+    "frame-src https: data: blob:; "
     "worker-src blob: data:; "
     "object-src 'none'; form-action 'none'; base-uri 'none'"
 )
@@ -838,7 +855,8 @@ def _sandbox_resolve(relpath: str, *, write: bool = False) -> tuple[Path, Path] 
 #      otherwise 403. The Referer is set by the browser and cannot be changed by the page (the
 #      Referrer-Policy header is emitted by the host too); `Sec-Fetch-*` tells browsers apart from
 #      curl/scripts, which stay unaffected (local ops and acceptance rely on that).
-#   2) **CSP**: `connect-src` / `frame-src` … list only this capsule's URL prefixes (see `page_csp`).
+#   2) **CSP**: `connect-src` / `frame-src` … list this capsule's URL prefixes, never the whole
+#      `'self'` (plus `https:` for anything it loads — see `page_csp`).
 # Identity is the first segment relative to the capsule root, not an absolute path: identically named
 # capsules in the system and user layers are the same capsule (the data directory falls back from
 # system to user anyway).

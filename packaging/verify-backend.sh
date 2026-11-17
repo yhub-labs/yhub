@@ -478,6 +478,15 @@ csp_script = headers.get("Content-Security-Policy", "").split("script-src")[1].s
     if "script-src" in headers.get("Content-Security-Policy", "") else ""
 assert "https:" in csp_script, \
     f"script-src 必须带 https:（托管页等价 file://，CDN 脚本（如 marked）要能加载）：{csp_script!r}"
+csp_frame = headers.get("Content-Security-Policy", "").split("frame-src")[1].split(";")[0] \
+    if "frame-src" in headers.get("Content-Security-Policy", "") else ""
+assert "https:" in csp_frame, (
+    "frame-src 必须带 https:（TiddlyWiki 的官方插件库是一个跨源 iframe；拦了它只会静默失败："
+    f"iframe 仍报 loaded，插件列表永远空白）：{csp_frame!r}")
+assert "/capsules/panel" in csp_frame, \
+    f"frame-src 仍要收口到本胶囊自己的前缀（不能给整个 'self'）：{csp_frame!r}"
+assert "http:" not in csp_frame.split(), \
+    f"frame-src 不许放 http:（会把无鉴权的 loopback 服务框进用户窗口）：{csp_frame!r}"
 app_etag = headers.get("ETag")
 assert app_etag, "GET 胶囊必须给 ETag（单文件应用靠它做冲突检测）"
 
@@ -1292,6 +1301,8 @@ assert headers.get("Cache-Control") == "no-store" and headers.get("ETag"), "内�
 csp = headers.get("Content-Security-Policy", "")
 assert "unsafe-eval" in csp and "https:" in csp.split("script-src")[-1].split(";")[0], \
     f"内置胶囊页面 CSP 不完整：{csp!r}"
+assert "https:" in csp.split("frame-src")[-1].split(";")[0], \
+    f"内置胶囊的 frame-src 缺 https:：官方插件库（tiddlywiki.com 的跨源 iframe）会静默加载失败：{csp!r}"
 status, _, headers = call(page, method="OPTIONS")
 assert status == 200 and headers.get("DAV"), f"内置胶囊 OPTIONS 必须 200 + DAV：HTTP {status}"
 status, _, headers = call(page, method="HEAD")
